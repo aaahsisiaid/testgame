@@ -9,11 +9,11 @@ body { background: #0a0a0f; overflow: hidden; font-family: monospace; }
 canvas { display: block; }
 #info {
   position: fixed; top: 16px; left: 16px;
-  font-size: 11px; color: #444; line-height: 2; pointer-events: none;
+  font-size: 11px; color: #333; line-height: 2; pointer-events: none;
 }
 #fold-count {
   position: fixed; top: 16px; right: 16px;
-  font-size: 11px; color: #444; text-align: right; pointer-events: none;
+  font-size: 11px; color: #333; text-align: right; pointer-events: none;
 }
 #strength-wrap {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -24,269 +24,148 @@ canvas { display: block; }
 #strength-bar-bg { width: 200px; height: 4px; background: #1a1a24; border-radius: 99px; }
 #strength-bar { height: 4px; border-radius: 99px; background: #7fffb2; width: 100%; transition: width 0.3s, background 0.3s; }
 #fold-hint {
-  position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
   font-size: 12px; color: #7fffb2; letter-spacing: 0.08em;
   pointer-events: none; transition: opacity 0.5s;
 }
-#message {
+#tear-warning {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   font-size: 13px; color: #ff7f50; letter-spacing: 0.1em;
-  opacity: 0; pointer-events: none; transition: opacity 0.3s; text-align: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
 }
 #title-overlay {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   text-align: center; pointer-events: none; transition: opacity 1s;
 }
-#title-overlay h1 { font-size: 56px; font-weight: 400; color: #7fffb2; letter-spacing: 0.3em; margin-bottom: 12px; }
-#title-overlay p { font-size: 12px; color: #444; letter-spacing: 0.15em; margin-bottom: 24px; }
-#title-overlay .start { font-size: 11px; color: #7fffb2; letter-spacing: 0.2em; animation: blink 1.5s infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+#title-overlay h1 { font-size: 48px; font-weight: 400; color: #7fffb2; letter-spacing: 0.3em; margin-bottom: 8px; }
+#title-overlay p  { font-size: 12px; color: #444; letter-spacing: 0.15em; }
 </style>
 </head>
 <body>
-
-<div id="info">
-  WASD — 移動<br>
-  SPACE — ジャンプ<br>
-  F — 折る / 広げる<br>
-  マウス — 視点
-</div>
+<div id="info">WASD — 移動<br>SPACE — ジャンプ<br>F — 折る / 広げる<br>マウス — 視点</div>
 <div id="fold-count">折り回数: <span id="fc">0</span> / 3</div>
-<div id="fold-hint">[ F ] で世界を折る</div>
+<div id="fold-hint">[ クリックして開始 ] → [ F ] で世界を折る</div>
 <div id="strength-wrap">
   <div id="strength-label">PAPER STRENGTH</div>
   <div id="strength-bar-bg"><div id="strength-bar"></div></div>
 </div>
-<div id="message"></div>
+<div id="tear-warning">— 紙が破れそうだ —</div>
 <div id="title-overlay">
   <h1>FOLD</h1>
   <p>正しい場所に立てば、世界は折れる。</p>
-  <div class="start">— クリックしてはじめる —</div>
 </div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0f);
 scene.fog = new THREE.Fog(0x0a0a0f, 20, 60);
-
 const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 100);
-camera.position.set(0, 2, 0);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(innerWidth, innerHeight);
+camera.position.set(0,2,0);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
-// Lights
-scene.add(new THREE.AmbientLight(0x7fffb2, 0.15));
-const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-dir.position.set(5,10,5); dir.castShadow = true;
-scene.add(dir);
-const pt = new THREE.PointLight(0xff7f50, 0.4, 20);
+scene.add(new THREE.AmbientLight(0x7fffb2,0.15));
+const dir = new THREE.DirectionalLight(0xffffff,0.8);
+dir.position.set(5,10,5); dir.castShadow=true; scene.add(dir);
+const pt = new THREE.PointLight(0xff7f50,0.4,20);
 pt.position.set(-3,4,-3); scene.add(pt);
 
-// Foldable floor
-const RES=30, SIZE=14;
+const RES=30,SIZE=14;
 const floorGeo = new THREE.PlaneGeometry(SIZE,SIZE,RES,RES);
 floorGeo.rotateX(-Math.PI/2);
 const origPos = floorGeo.attributes.position.array.slice();
-const floorMat = new THREE.MeshStandardMaterial({ color:0x12121c, side:THREE.DoubleSide, roughness:0.9 });
-const floor = new THREE.Mesh(floorGeo, floorMat);
-floor.receiveShadow = true;
-scene.add(floor);
-
-// Wireframe overlay
+const floor = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({color:0x12121c,side:THREE.DoubleSide,roughness:0.9}));
+floor.receiveShadow=true; scene.add(floor);
 const wireGeo = new THREE.PlaneGeometry(SIZE,SIZE,RES,RES);
 wireGeo.rotateX(-Math.PI/2);
-const wire = new THREE.Mesh(wireGeo, new THREE.MeshBasicMaterial({ color:0x7fffb2, wireframe:true, transparent:true, opacity:0.07 }));
-wire.position.y = 0.001;
-scene.add(wire);
+const wire = new THREE.Mesh(wireGeo, new THREE.MeshBasicMaterial({color:0x7fffb2,wireframe:true,transparent:true,opacity:0.08}));
+wire.position.y=0.001; scene.add(wire);
 
-// Walls
-const wm = new THREE.MeshStandardMaterial({ color:0x0f0f18, roughness:1 });
-[[0,2.5,-SIZE/2],[0,2.5,SIZE/2]].forEach(([x,y,z])=>{
-  const w = new THREE.Mesh(new THREE.BoxGeometry(SIZE,5,0.2),wm);
-  w.position.set(x,y,z); scene.add(w);
-});
-[[-SIZE/2,2.5,0],[SIZE/2,2.5,0]].forEach(([x,y,z])=>{
-  const w = new THREE.Mesh(new THREE.BoxGeometry(0.2,5,SIZE),wm);
-  w.position.set(x,y,z); scene.add(w);
-});
+const wmat = new THREE.MeshStandardMaterial({color:0x0f0f18,roughness:1});
+[[0,2.5,-SIZE/2],[0,2.5,SIZE/2]].forEach(([x,y,z])=>{const m=new THREE.Mesh(new THREE.BoxGeometry(SIZE,5,0.2),wmat);m.position.set(x,y,z);scene.add(m);});
+[[-SIZE/2,2.5,0],[SIZE/2,2.5,0]].forEach(([x,y,z])=>{const m=new THREE.Mesh(new THREE.BoxGeometry(0.2,5,SIZE),wmat);m.position.set(x,y,z);scene.add(m);});
 
-// Goal
-const goal = new THREE.Mesh(
-  new THREE.BoxGeometry(2,0.2,2),
-  new THREE.MeshStandardMaterial({ color:0xff7f50, emissive:0xff3300, emissiveIntensity:0.4 })
-);
-goal.position.set(4,3.5,-4);
-scene.add(goal);
-const gl = new THREE.PointLight(0xff7f50, 1.2, 8);
-gl.position.copy(goal.position); scene.add(gl);
+const goal = new THREE.Mesh(new THREE.BoxGeometry(2,0.2,2),new THREE.MeshStandardMaterial({color:0xff7f50,emissive:0xff3300,emissiveIntensity:0.3}));
+goal.position.set(4,3.5,-4); scene.add(goal);
+const gl2 = new THREE.PointLight(0xff7f50,1,6); gl2.position.copy(goal.position); scene.add(gl2);
 
-// Goal label
-const c2 = document.createElement('canvas');
-c2.width=128; c2.height=32;
-const cx = c2.getContext('2d');
-cx.fillStyle='#ff7f50'; cx.font='bold 14px monospace';
-cx.fillText('GOAL', 40, 22);
-const label = new THREE.Mesh(
-  new THREE.PlaneGeometry(2,0.5),
-  new THREE.MeshBasicMaterial({ map:new THREE.CanvasTexture(c2), transparent:true, side:THREE.DoubleSide })
-);
-label.position.set(4,4.3,-4);
-scene.add(label);
+const player = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,1.6,16),new THREE.MeshStandardMaterial({color:0x7fffb2,emissive:0x7fffb2,emissiveIntensity:0.2}));
+player.position.set(0,1,3); player.castShadow=true; scene.add(player);
 
-// Player
-const player = new THREE.Mesh(
-  new THREE.CapsuleGeometry(0.3,1,8,16),
-  new THREE.MeshStandardMaterial({ color:0x7fffb2, emissive:0x7fffb2, emissiveIntensity:0.2 })
-);
-player.position.set(0,1,3);
-player.castShadow = true;
-scene.add(player);
+const vel=new THREE.Vector3();
+let onGround=false,foldAngle=0,targetFold=0,foldCount=0,strength=100;
+let isLocked=false,yaw=0,pitch=0,titleShown=true,won=false;
+const keys={};
 
-// State
-let vel = new THREE.Vector3();
-let onGround = false;
-let foldAngle = 0, targetFold = 0;
-let foldCount = 0, strength = 100;
-let yaw = 0, pitch = 0;
-let locked = false, titleShown = true, won = false;
-const keys = {};
-
-// Pointer lock
-renderer.domElement.addEventListener('click', ()=>{
-  if(titleShown){
-    const t = document.getElementById('title-overlay');
-    t.style.opacity='0';
-    setTimeout(()=>t.style.display='none',1000);
-    titleShown=false;
-  }
+renderer.domElement.addEventListener('click',()=>{
+  if(titleShown){const ov=document.getElementById('title-overlay');ov.style.opacity='0';setTimeout(()=>ov.style.display='none',1000);titleShown=false;document.getElementById('fold-hint').textContent='[ F ] で世界を折る';}
   renderer.domElement.requestPointerLock();
 });
-document.addEventListener('pointerlockchange',()=>{ locked = document.pointerLockElement===renderer.domElement; });
-document.addEventListener('mousemove',e=>{
-  if(!locked) return;
-  yaw -= e.movementX*0.002;
-  pitch = Math.max(-1.2, Math.min(1.2, pitch - e.movementY*0.002));
-});
+document.addEventListener('pointerlockchange',()=>{isLocked=document.pointerLockElement===renderer.domElement;});
+document.addEventListener('mousemove',e=>{if(!isLocked)return;yaw-=e.movementX*0.002;pitch-=e.movementY*0.002;pitch=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,pitch));});
 document.addEventListener('keydown',e=>{
   keys[e.code]=true;
   if(e.code==='KeyF'){
-    if(targetFold===0 && foldCount<3 && strength>10){
-      targetFold=Math.PI; foldCount++;
-      strength=Math.max(0,strength-30);
-      document.getElementById('fold-hint').style.opacity='0';
-      document.getElementById('fc').textContent=foldCount;
-    } else if(targetFold!==0){
-      targetFold=0;
-    }
+    if(targetFold===0&&foldCount<3&&strength>10){targetFold=Math.PI;foldCount++;strength-=30;document.getElementById('fold-hint').style.opacity='0';document.getElementById('fc').textContent=foldCount;}
+    else if(targetFold!==0){targetFold=0;}
   }
-  if(e.code==='Space') e.preventDefault();
 });
-document.addEventListener('keyup',e=>{ keys[e.code]=false; });
+document.addEventListener('keyup',e=>{keys[e.code]=false;});
 
 function applyFold(angle){
-  const pos=floorGeo.attributes.position;
-  const wpos=wireGeo.attributes.position;
-  const fz=0;
+  const pos=floorGeo.attributes.position,wpos=wireGeo.attributes.position;
   for(let i=0;i<pos.count;i++){
-    const ox=origPos[i*3], oy=origPos[i*3+1], oz=origPos[i*3+2];
-    if(oz<fz){
-      const dist=fz-oz;
-      const ny=dist*Math.sin(angle);
-      const nz=fz-dist*Math.cos(angle);
-      pos.setXYZ(i,ox,ny,nz);
-      wpos.setXYZ(i,ox,ny+0.01,nz);
-    } else {
-      pos.setXYZ(i,ox,oy,oz);
-      wpos.setXYZ(i,ox,oy+0.01,oz);
-    }
+    const ox=origPos[i*3],oy=origPos[i*3+1],oz=origPos[i*3+2];
+    if(oz<0){const d=-oz;pos.setXYZ(i,ox,d*Math.sin(angle),-(d*Math.cos(angle)));wpos.setXYZ(i,ox,d*Math.sin(angle)+0.01,-(d*Math.cos(angle)));}
+    else{pos.setXYZ(i,ox,oy,oz);wpos.setXYZ(i,ox,oy+0.01,oz);}
   }
-  pos.needsUpdate=true; wpos.needsUpdate=true;
-  floorGeo.computeVertexNormals();
+  pos.needsUpdate=true;wpos.needsUpdate=true;floorGeo.computeVertexNormals();
 }
+function getFloorY(x,z){if(z>=0)return 0;return(-z)*Math.sin(foldAngle);}
 
-function getFloorY(x,z){
-  const fz=0;
-  if(z>=fz) return 0;
-  const dist=fz-z;
-  return dist*Math.sin(foldAngle);
-}
-
-function showMsg(text, color, duration){
-  const m=document.getElementById('message');
-  m.textContent=text; m.style.color=color; m.style.opacity='1';
-  setTimeout(()=>m.style.opacity='0', duration||2500);
-}
-
-const clock = new THREE.Clock();
+const clock=new THREE.Clock();
 function animate(){
   requestAnimationFrame(animate);
   const dt=Math.min(clock.getDelta(),0.05);
-
-  foldAngle += (targetFold-foldAngle)*dt*4;
+  foldAngle+=(targetFold-foldAngle)*dt*4;
   applyFold(foldAngle);
-
-  // Strength regen
-  if(strength<100) strength=Math.min(100,strength+dt*4);
+  if(strength<100)strength=Math.min(100,strength+dt*5);
   const bar=document.getElementById('strength-bar');
   bar.style.width=strength+'%';
   bar.style.background=strength<30?'#ff7f50':strength<60?'#ffcc44':'#7fffb2';
-
-  // Movement
-  if(locked){
+  document.getElementById('tear-warning').style.opacity=strength<25?'1':'0';
+  if(isLocked){
     const fwd=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
-    const rgt=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-    const dir=new THREE.Vector3();
-    if(keys['KeyW']) dir.addScaledVector(fwd,1);
-    if(keys['KeyS']) dir.addScaledVector(fwd,-1);
-    if(keys['KeyA']) dir.addScaledVector(rgt,-1);
-    if(keys['KeyD']) dir.addScaledVector(rgt,1);
-    if(dir.length()>0) dir.normalize();
-    vel.x+=(dir.x*5-vel.x)*dt*10;
-    vel.z+=(dir.z*5-vel.z)*dt*10;
-    vel.y-=20*dt;
+    const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+    const d=new THREE.Vector3();
+    if(keys['KeyW'])d.addScaledVector(fwd,1);
+    if(keys['KeyS'])d.addScaledVector(fwd,-1);
+    if(keys['KeyA'])d.addScaledVector(right,-1);
+    if(keys['KeyD'])d.addScaledVector(right,1);
+    d.normalize();
+    vel.x+=(d.x*5-vel.x)*dt*10;vel.z+=(d.z*5-vel.z)*dt*10;vel.y-=20*dt;
     player.position.addScaledVector(vel,dt);
-
-    // Floor collision
     const fy=getFloorY(player.position.x,player.position.z);
-    if(player.position.y<fy+0.8){
-      player.position.y=fy+0.8;
-      if(vel.y<0) vel.y=0;
-      onGround=true;
-    } else { onGround=false; }
-
-    if(player.position.y>4.8){ player.position.y=4.8; vel.y=0; }
-    const half=SIZE/2-0.4;
+    if(player.position.y<fy+0.8){player.position.y=fy+0.8;if(vel.y<0)vel.y=0;onGround=true;}else{onGround=false;}
+    if(player.position.y>4.5){player.position.y=4.5;vel.y=0;}
+    const half=SIZE/2-0.5;
     player.position.x=Math.max(-half,Math.min(half,player.position.x));
     player.position.z=Math.max(-half,Math.min(half,player.position.z));
-
-    if(keys['Space']&&onGround){ vel.y=7; }
-
-    // Goal check
-    if(!won&&player.position.distanceTo(goal.position)<1.5){
-      won=true;
-      showMsg('GOAL  世界を折って辿り着いた', '#7fffb2', 4000);
-    }
+    if(keys['Space']&&onGround){vel.y=7;onGround=false;}
   }
-
   camera.position.copy(player.position).add(new THREE.Vector3(0,0.5,0));
-  camera.rotation.order='YXZ';
-  camera.rotation.y=yaw;
-  camera.rotation.x=pitch;
-  label.lookAt(camera.position);
-
+  camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;
+  if(!won&&player.position.distanceTo(goal.position)<1.5){
+    won=true;const tw=document.getElementById('tear-warning');
+    tw.textContent='— GOAL! 世界を折って辿り着いた —';tw.style.color='#7fffb2';tw.style.opacity='1';
+    setTimeout(()=>{tw.style.opacity='0';},3000);
+  }
   renderer.render(scene,camera);
 }
 animate();
-
-window.addEventListener('resize',()=>{
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-});
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 </script>
 </body>
 </html>
