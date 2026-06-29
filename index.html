@@ -2,48 +2,44 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>FOLD v5 — Photo Fold</title>
+<title>FOLD v7 — Projection Fold</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0a0a0f;overflow:hidden;font-family:monospace;user-select:none}
 #main-canvas{display:block;position:fixed;top:0;left:0}
-#ui{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none}
 #info{position:fixed;top:16px;left:16px;font-size:11px;color:#444;line-height:2.4}
 #info b{color:#7fffb2}
 #mode-badge{position:fixed;top:16px;right:16px;font-size:11px;padding:4px 14px;border-radius:99px;border:.5px solid #ff7f50;color:#ff7f50;letter-spacing:.1em}
 #msg{position:fixed;bottom:56px;left:50%;transform:translateX(-50%);font-size:12px;color:#7fffb2;letter-spacing:.08em;text-align:center;line-height:2;pointer-events:none}
-#angle-wrap{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;pointer-events:none;opacity:0;transition:opacity .3s}
-#angle-label{font-size:10px;color:#444;letter-spacing:.1em}
-#angle-val{font-size:13px;color:#7fffb2;font-family:monospace;min-width:40px}
-/* photo fold UI */
-#photo-ui{position:fixed;top:0;left:0;width:100%;height:100%;display:none;pointer-events:all}
-#photo-bg{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7)}
+
+#photo-ui{position:fixed;top:0;left:0;width:100%;height:100%;display:none;pointer-events:all;z-index:100}
+#photo-bg{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.72)}
 #fold-canvas{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);cursor:crosshair;border:.5px solid rgba(127,255,178,.2)}
-#fold-controls{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:12px;align-items:center}
-.btn{background:rgba(127,255,178,.08);border:.5px solid rgba(127,255,178,.4);color:#7fffb2;font-family:monospace;font-size:11px;padding:7px 18px;border-radius:4px;cursor:pointer;letter-spacing:.08em;pointer-events:all}
+#fold-controls{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;z-index:101}
+.btn{background:rgba(127,255,178,.08);border:.5px solid rgba(127,255,178,.4);color:#7fffb2;font-family:monospace;font-size:11px;padding:7px 18px;border-radius:4px;cursor:pointer;letter-spacing:.08em}
 .btn:hover{background:rgba(127,255,178,.18)}
 .btn.danger{border-color:rgba(255,127,80,.4);color:#ff7f50;background:rgba(255,127,80,.06)}
 .btn.danger:hover{background:rgba(255,127,80,.14)}
 #angle-slider-wrap{display:flex;align-items:center;gap:8px}
 #angle-slider-label{font-size:10px;color:#7fffb2;letter-spacing:.08em}
-#angle-slider{width:120px;accent-color:#7fffb2}
-#angle-display{font-size:11px;color:#7fffb2;min-width:38px}
-#fold-hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;color:rgba(127,255,178,.4);pointer-events:none;text-align:center;line-height:2}
+#angle-slider{width:180px;accent-color:#7fffb2}
+#angle-display{font-size:11px;color:#7fffb2;min-width:46px;text-align:right}
+#fold-hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;color:rgba(127,255,178,.4);pointer-events:none;text-align:center;line-height:2;z-index:102}
+#toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:rgba(10,10,15,.92);border:.5px solid rgba(127,255,178,.3);padding:12px 22px;border-radius:6px;font-size:11px;color:#7fffb2;text-align:center;line-height:1.8;pointer-events:none;opacity:0;transition:opacity .25s;z-index:9999;max-width:400px;white-space:pre-line}
+#toast.show{opacity:1}
+#toast.err{color:#ff7f50;border-color:rgba(255,127,80,.3)}
 </style>
 </head>
 <body>
 <canvas id="main-canvas"></canvas>
-<div id="ui">
-  <div id="info">
-    <b>WASD</b> 移動 &nbsp;<b>右ドラッグ</b> 視点<br>
-    <b>SPACE</b> ジャンプ<br>
-    <b>TAB</b> 写真を撮って折る
-  </div>
-  <div id="mode-badge">MOVE</div>
-  <div id="msg">TABキーで今の視点を撮影 → 折って3D化</div>
+<div id="info">
+  <b>WASD</b> 移動 &nbsp;<b>右ドラッグ</b> 視点<br>
+  <b>SPACE</b> ジャンプ<br>
+  <b>TAB</b> 写真を撮って折る
 </div>
+<div id="mode-badge">MOVE</div>
+<div id="msg">TABキーで今の視点を撮影 → 折り線を引いて3D配置</div>
 
-<!-- Photo fold UI -->
 <div id="photo-ui">
   <div id="photo-bg"></div>
   <canvas id="fold-canvas"></canvas>
@@ -51,120 +47,182 @@ body{background:#0a0a0f;overflow:hidden;font-family:monospace;user-select:none}
   <div id="fold-controls">
     <div id="angle-slider-wrap">
       <div id="angle-slider-label">折り角度</div>
-      <input type="range" id="angle-slider" min="1" max="179" value="90">
+      <input type="range" id="angle-slider" min="-179" max="179" value="90" step="1">
       <div id="angle-display">90°</div>
     </div>
-    <button class="btn" id="btn-fold">折る</button>
     <button class="btn" id="btn-place">3Dに配置 ↗</button>
     <button class="btn danger" id="btn-cancel">キャンセル</button>
   </div>
 </div>
+<div id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ── Three.js setup ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+//  Three.js setup
+// ═══════════════════════════════════════════════════════════
 const mainCanvas = document.getElementById('main-canvas');
-const renderer = new THREE.WebGLRenderer({canvas:mainCanvas, antialias:true, preserveDrawingBuffer:true});
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const renderer = new THREE.WebGLRenderer({canvas:mainCanvas,antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 
-const scene = new THREE.Scene();
+const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0f);
-scene.fog = new THREE.Fog(0x0a0a0f, 22, 65);
+scene.fog = new THREE.Fog(0x0a0a0f,22,65);
 
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,100);
 
-// ── Lights ────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x8888ff, 0.13));
-const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-sun.position.set(8,14,6); sun.castShadow=true;
+scene.add(new THREE.AmbientLight(0x8888ff,0.13));
+const sun=new THREE.DirectionalLight(0xffffff,0.9);
+sun.position.set(8,14,6);sun.castShadow=true;
 sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.left=-22; sun.shadow.camera.right=22;
-sun.shadow.camera.top=22; sun.shadow.camera.bottom=-22;
+sun.shadow.camera.left=-22;sun.shadow.camera.right=22;
+sun.shadow.camera.top=22;sun.shadow.camera.bottom=-22;
 sun.shadow.camera.far=80;
 scene.add(sun);
-const fill = new THREE.PointLight(0x4466ff, 0.3, 30);
-fill.position.set(-5,5,5); scene.add(fill);
+scene.add(Object.assign(new THREE.PointLight(0x4466ff,0.3,30),{position:{x:-5,y:5,z:5}}));
 
 // ── Stage ─────────────────────────────────────────────────
 const matFloor = new THREE.MeshStandardMaterial({color:0x11111a,roughness:.95});
 const matWall  = new THREE.MeshStandardMaterial({color:0x0d0d17,roughness:1});
 const matGoal  = new THREE.MeshStandardMaterial({color:0xff7f50,emissive:0xff4400,emissiveIntensity:.4});
+const matPlat  = new THREE.MeshStandardMaterial({color:0x1a1a2e,roughness:.9});
 
-function box(x,y,z,w,h,d,mat){
+// "sceneObjects" = all meshes we track for fold-projection (exclude walls/floor/player)
+const sceneObjects = []; // {mesh, geo:{type,color,emissive,emissiveIntensity,roughness,metalness,sx,sy,sz}}
+
+function addBox(x,y,z,w,h,d,mat,track=false,meta={}){
   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
-  m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
+  m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);
+  if(track) sceneObjects.push({mesh:m,meta:{...meta,type:'box',sx:w,sy:h,sz:d}});
+  return m;
 }
-box(0,-.15,0, 24,.3,24, matFloor);
-box(0,2.5,-12, 24,5,.3, matWall);
-box(0,2.5, 12, 24,5,.3, matWall);
-box(-12,2.5,0, .3,5,24, matWall);
-box( 12,2.5,0, .3,5,24, matWall);
 
-// Some platforms
-const mA=new THREE.MeshStandardMaterial({color:0x1a1a2e,roughness:.9});
-box(-4,1,  2, 2,.2,2, mA);
-box( 3,1.5,-3, 2,.2,2, mA);
-box(-2,2.5,-5, 2,.2,2, mA);
+// Floor + walls (not tracked)
+addBox(0,-.15,0,24,.3,24,matFloor);
+addBox(0,2.5,-12,24,5,.3,matWall);
+addBox(0,2.5,12,24,5,.3,matWall);
+addBox(-12,2.5,0,.3,5,24,matWall);
+addBox(12,2.5,0,.3,5,24,matWall);
 
-// Goal — high up
-box(5,5,-7, 3,.25,3, matGoal);
-const gl=new THREE.PointLight(0xff7f50,1.5,8);gl.position.set(5,6,-7);scene.add(gl);
+// Platforms (tracked)
+addBox(-4,1,2,2,.2,2,matPlat,true,{color:0x1a1a2e,roughness:.9,metalness:0,emissive:0x000000,emissiveIntensity:0});
+addBox(3,1.5,-3,2,.2,2,matPlat,true,{color:0x1a1a2e,roughness:.9,metalness:0,emissive:0x000000,emissiveIntensity:0});
+addBox(-2,2.5,-5,2,.2,2,matPlat,true,{color:0x1a1a2e,roughness:.9,metalness:0,emissive:0x000000,emissiveIntensity:0});
+
+// Goal (tracked)
+addBox(5,5,-7,3,.25,3,matGoal,true,{color:0xff7f50,roughness:.4,metalness:.1,emissive:0xff4400,emissiveIntensity:.4});
+const goalLight=new THREE.PointLight(0xff7f50,1.5,8);goalLight.position.set(5,6,-7);scene.add(goalLight);
 
 // ── Player ────────────────────────────────────────────────
-const pmesh = new THREE.Mesh(
+const pmesh=new THREE.Mesh(
   new THREE.CylinderGeometry(.25,.25,1.4,10),
   new THREE.MeshStandardMaterial({color:0x7fffb2,emissive:0x7fffb2,emissiveIntensity:.18})
 );
-pmesh.castShadow=true; scene.add(pmesh);
+pmesh.castShadow=true;scene.add(pmesh);
+// player is tracked too
+sceneObjects.push({mesh:pmesh,meta:{type:'cylinder',sx:.5,sy:1.4,sz:.5,color:0x7fffb2,roughness:.5,metalness:0,emissive:0x7fffb2,emissiveIntensity:.18}});
 
-const P = {
-  pos: new THREE.Vector3(0,1.7,8),
-  vel: new THREE.Vector3(),
-  yaw: Math.PI, pitch:-.15,
-  onGround:false,
-};
+const P={pos:new THREE.Vector3(0,1.7,8),vel:new THREE.Vector3(),yaw:Math.PI,pitch:-.15,onGround:false};
 
-// ── PHOTO FOLD UI ─────────────────────────────────────────
-const photoUI    = document.getElementById('photo-ui');
-const foldCanvas = document.getElementById('fold-canvas');
-const fc         = foldCanvas.getContext('2d');
-const angleSlider= document.getElementById('angle-slider');
+// ═══════════════════════════════════════════════════════════
+//  Toast
+// ═══════════════════════════════════════════════════════════
+const toastEl=document.getElementById('toast');
+let toastTimer=null;
+function showToast(msg,err=false,dur=3500){
+  toastEl.textContent=msg;
+  toastEl.className='show'+(err?' err':'');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>toastEl.className='',dur);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Photo / Fold UI
+// ═══════════════════════════════════════════════════════════
+const photoUI   =document.getElementById('photo-ui');
+const foldCanvas=document.getElementById('fold-canvas');
+const fc        =foldCanvas.getContext('2d');
+const angleSlider=document.getElementById('angle-slider');
 const angleDisplay=document.getElementById('angle-display');
-const foldHint   = document.getElementById('fold-hint');
+const foldHint  =document.getElementById('fold-hint');
 
-const FOLD_W = Math.min(innerWidth*.78, 900);
-const FOLD_H = Math.floor(FOLD_W * innerHeight/innerWidth);
-foldCanvas.width  = FOLD_W;
-foldCanvas.height = FOLD_H;
-foldCanvas.style.width  = FOLD_W+'px';
-foldCanvas.style.height = FOLD_H+'px';
+const FOLD_W=Math.min(innerWidth*.78,900);
+const FOLD_H=Math.floor(FOLD_W*innerHeight/innerWidth);
+foldCanvas.width=FOLD_W; foldCanvas.height=FOLD_H;
+foldCanvas.style.width=FOLD_W+'px'; foldCanvas.style.height=FOLD_H+'px';
 
-let photoImg    = null; // ImageData of the screenshot
-let foldAxisA   = null, foldAxisB = null; // screen coords within foldCanvas
-let foldAngle   = 90;   // degrees
-let folded      = false;
-let foldDragging= false;
+let photoImg=null;
+let foldAxisA=null,foldAxisB=null;
+let foldAngle=90;
+let foldDragging=false;
 
-angleSlider.addEventListener('input', ()=>{
-  foldAngle = parseInt(angleSlider.value);
-  angleDisplay.textContent = foldAngle+'°';
-  if(foldAxisA && foldAxisB) drawFoldPreview();
+// Snapshot taken at TAB: store camera matrices + object screen-space data
+let snapCamProjView=null;   // projectionMatrix * matrixWorldInverse (VP matrix)
+let snapObjects=[];         // [{mesh,meta,screenPos,screenSize,depth,worldPos}]
+
+angleSlider.addEventListener('input',()=>{
+  foldAngle=parseInt(angleSlider.value);
+  angleDisplay.textContent=foldAngle+'°';
+  if(foldAxisA&&foldAxisB) drawFoldPreview();
 });
 
-// Take screenshot and open fold UI
+// ── World→Screen helper ───────────────────────────────────
+function worldToScreen(worldPos, vpMatrix){
+  const v=worldPos.clone().applyMatrix4(vpMatrix);
+  // v is in NDC (-1..1)
+  return {
+    x: (v.x*0.5+0.5)*FOLD_W,
+    y: (1-(v.y*0.5+0.5))*FOLD_H,
+    depth: v.z  // -1 (near) .. 1 (far)
+  };
+}
+
+// ── Take snapshot ─────────────────────────────────────────
 function openPhotoMode(){
-  renderer.render(scene, camera); // ensure fresh frame
-  // grab pixels
-  const imgData = renderer.domElement.toDataURL('image/png');
-  const img = new Image();
-  img.onload = ()=>{
-    photoImg = img;
+  renderer.render(scene,camera);
+
+  // Build VP matrix from current camera state
+  camera.updateMatrixWorld();
+  const VP=new THREE.Matrix4().multiplyMatrices(
+    camera.projectionMatrix,
+    camera.matrixWorldInverse
+  );
+  snapCamProjView=VP.clone();
+
+  // Project every tracked object onto screen
+  snapObjects=[];
+  sceneObjects.forEach(({mesh,meta})=>{
+    const wpos=new THREE.Vector3();
+    mesh.getWorldPosition(wpos);
+    const sc=worldToScreen(wpos,VP);
+    // Approximate screen size: project a point offset by max half-size
+    const halfMax=Math.max(meta.sx,meta.sy,meta.sz)*0.5;
+    const edge=wpos.clone().add(new THREE.Vector3(halfMax,0,0));
+    const scEdge=worldToScreen(edge,VP);
+    const screenRadius=Math.abs(scEdge.x-sc.x);
+
+    // Frustum check: only include if roughly in view
+    if(sc.depth<-0.95||sc.depth>1.0) return; // behind or too far
+    if(sc.x<-screenRadius*2||sc.x>FOLD_W+screenRadius*2) return;
+    if(sc.y<-screenRadius*2||sc.y>FOLD_H+screenRadius*2) return;
+
+    snapObjects.push({mesh,meta,screenPos:sc,screenRadius,worldPos:wpos.clone(),depth:sc.depth});
+  });
+
+  // Grab screenshot
+  const dataURL=renderer.domElement.toDataURL('image/png');
+  const img=new Image();
+  img.onload=()=>{
+    photoImg=img;
     fc.clearRect(0,0,FOLD_W,FOLD_H);
-    fc.drawImage(img, 0,0, FOLD_W, FOLD_H);
-    foldAxisA = null; foldAxisB = null;
-    folded = false;
+    fc.drawImage(img,0,0,FOLD_W,FOLD_H);
+
+    // Draw projected object outlines on fold-canvas for reference
+    drawObjectMarkers();
+
+    foldAxisA=null; foldAxisB=null;
     foldHint.style.opacity='1';
     photoUI.style.display='block';
     document.getElementById('mode-badge').textContent='PHOTO';
@@ -172,7 +230,20 @@ function openPhotoMode(){
     document.getElementById('mode-badge').style.borderColor='#b0a0ff';
     document.getElementById('msg').textContent='';
   };
-  img.src = imgData;
+  img.src=dataURL;
+}
+
+function drawObjectMarkers(){
+  snapObjects.forEach(o=>{
+    const {screenPos:sp,screenRadius:sr}=o;
+    fc.save();
+    fc.strokeStyle='rgba(127,255,178,.35)';
+    fc.lineWidth=1;
+    fc.setLineDash([3,3]);
+    fc.strokeRect(sp.x-sr,sp.y-sr,sr*2,sr*2);
+    fc.setLineDash([]);
+    fc.restore();
+  });
 }
 
 function closePhotoMode(){
@@ -180,231 +251,291 @@ function closePhotoMode(){
   document.getElementById('mode-badge').textContent='MOVE';
   document.getElementById('mode-badge').style.color='#ff7f50';
   document.getElementById('mode-badge').style.borderColor='#ff7f50';
-  document.getElementById('msg').textContent='TABキーで今の視点を撮影 → 折って3D化';
+  document.getElementById('msg').textContent='TABキーで今の視点を撮影 → 折り線を引いて3D配置';
 }
 
-// Draw the fold preview on foldCanvas
-function drawFoldPreview(){
-  if(!photoImg) return;
-  fc.clearRect(0,0,FOLD_W,FOLD_H);
-
-  if(!foldAxisA || !foldAxisB){
-    fc.drawImage(photoImg, 0,0,FOLD_W,FOLD_H);
-    return;
-  }
-
-  const ax=foldAxisA.x, ay=foldAxisA.y;
-  const bx=foldAxisB.x, by=foldAxisB.y;
-  const adx=bx-ax, ady=by-ay;
-  const alen=Math.sqrt(adx*adx+ady*ady);
-  if(alen<4){fc.drawImage(photoImg,0,0,FOLD_W,FOLD_H);return;}
-  const anx=adx/alen, any=ady/alen; // axis unit
-  const nx=-any, ny=anx;            // normal (right side folds)
-
-  // Draw left (static) half
-  fc.save();
-  fc.beginPath();
-  // clip to LEFT side of axis
-  // Build clip polygon: large rect clipped by the axis line
-  const pts = clipRectByLine(0,0,FOLD_W,FOLD_H, ax,ay,bx,by, -1);
-  if(pts.length>=3){
-    fc.moveTo(pts[0].x,pts[0].y);
-    for(let i=1;i<pts.length;i++)fc.lineTo(pts[i].x,pts[i].y);
-    fc.closePath();
-    fc.clip();
-    fc.drawImage(photoImg,0,0,FOLD_W,FOLD_H);
-  }
-  fc.restore();
-
-  // Draw right (folded) half — apply perspective transform
-  const rad = foldAngle * Math.PI/180;
-  const cosA = Math.cos(rad);
-  const sinA = Math.sin(rad);
-
-  fc.save();
-  // clip to RIGHT side
-  const ptsR = clipRectByLine(0,0,FOLD_W,FOLD_H, ax,ay,bx,by, 1);
-  if(ptsR.length>=3){
-    fc.beginPath();
-    fc.moveTo(ptsR[0].x,ptsR[0].y);
-    for(let i=1;i<ptsR.length;i++)fc.lineTo(ptsR[i].x,ptsR[i].y);
-    fc.closePath();
-    fc.clip();
-
-    // Transform: fold the right side around the axis
-    // Each point p on right side:
-    //   dist = (p-A)·n  (perpendicular distance from axis)
-    //   new point = p - n*dist + n*dist*cos(angle) - axis_normal_perp * dist*sin(angle)
-    // In 2D canvas we use setTransform to simulate this
-
-    // midpoint of axis for transform center
-    const mx=(ax+bx)/2, my=(ay+by)/2;
-
-    // We'll draw the image transformed
-    // Translate to axis midpoint, rotate by axis angle,
-    // scale x by cos(foldAngle) to simulate perspective fold,
-    // then rotate back
-    const axisAngle = Math.atan2(ady,adx);
-    fc.translate(mx,my);
-    fc.rotate(axisAngle);
-    fc.transform(1,0,0,cosA,0,0); // squish in perpendicular direction
-    fc.rotate(-axisAngle);
-    fc.translate(-mx,-my);
-    fc.globalAlpha = 0.55 + 0.45*cosA; // darker as it folds away
-    fc.drawImage(photoImg,0,0,FOLD_W,FOLD_H);
-  }
-  fc.restore();
-
-  // Draw fold line
-  fc.save();
-  fc.strokeStyle='rgba(127,255,178,.9)';
-  fc.lineWidth=1.5;
-  fc.setLineDash([5,4]);
-  fc.beginPath();fc.moveTo(ax,ay);fc.lineTo(bx,by);fc.stroke();
-  // angle label
-  fc.setLineDash([]);
-  fc.fillStyle='rgba(127,255,178,.8)';
-  fc.font='11px monospace';
-  fc.fillText(foldAngle+'°', (ax+bx)/2+8,(ay+by)/2-6);
-  fc.restore();
-}
-
-// Clip rectangle [0,0,W,H] to one side of line A→B
-// side: +1 = right (normal side), -1 = left
+// ── Fold preview drawing ──────────────────────────────────
 function clipRectByLine(x0,y0,x1,y1,ax,ay,bx,by,side){
   const corners=[{x:x0,y:y0},{x:x1,y:y0},{x:x1,y:y1},{x:x0,y:y1}];
-  const dx=bx-ax,dy=by-ay;
-  // normal pointing right of A→B
-  const nx=-dy,ny=dx;
-  function sign(p){return (p.x-ax)*nx+(p.y-ay)*ny;}
-  // Sutherland–Hodgman clip
-  let poly=corners;
-  // clip against one half-plane
+  const dx=bx-ax,dy=by-ay,nx=-dy,ny=dx;
+  function sgn(p){return (p.x-ax)*nx+(p.y-ay)*ny;}
   const result=[];
-  for(let i=0;i<poly.length;i++){
-    const cur=poly[i],nxt=poly[(i+1)%poly.length];
-    const sc=sign(cur)*side, sn=sign(nxt)*side;
+  for(let i=0;i<corners.length;i++){
+    const cur=corners[i],nxt=corners[(i+1)%corners.length];
+    const sc=sgn(cur)*side,sn=sgn(nxt)*side;
     if(sc>=0)result.push(cur);
     if((sc>=0&&sn<0)||(sc<0&&sn>=0)){
-      // intersection
-      const t=sign(cur)/(sign(cur)-sign(nxt));
+      const t=sgn(cur)/(sgn(cur)-sgn(nxt));
       result.push({x:cur.x+(nxt.x-cur.x)*t,y:cur.y+(nxt.y-cur.y)*t});
     }
   }
   return result;
 }
 
-// Fold canvas mouse events
-foldCanvas.addEventListener('mousedown', e=>{
+function drawFoldPreview(){
+  if(!photoImg) return;
+  fc.clearRect(0,0,FOLD_W,FOLD_H);
+
+  if(!foldAxisA||!foldAxisB){
+    fc.drawImage(photoImg,0,0,FOLD_W,FOLD_H);
+    drawObjectMarkers();
+    return;
+  }
+  const ax=foldAxisA.x,ay=foldAxisA.y,bx=foldAxisB.x,by=foldAxisB.y;
+  const adx=bx-ax,ady=by-ay,alen=Math.sqrt(adx*adx+ady*ady);
+  if(alen<4){fc.drawImage(photoImg,0,0,FOLD_W,FOLD_H);drawObjectMarkers();return;}
+
+  const cosA=Math.cos(foldAngle*Math.PI/180);
+  const axisAngle=Math.atan2(ady,adx);
+  const mx=(ax+bx)/2,my=(ay+by)/2;
+
+  // Static (left) half
+  fc.save();
+  const ptsL=clipRectByLine(0,0,FOLD_W,FOLD_H,ax,ay,bx,by,-1);
+  if(ptsL.length>=3){
+    fc.beginPath();fc.moveTo(ptsL[0].x,ptsL[0].y);
+    for(let i=1;i<ptsL.length;i++)fc.lineTo(ptsL[i].x,ptsL[i].y);
+    fc.closePath();fc.clip();
+    fc.drawImage(photoImg,0,0,FOLD_W,FOLD_H);
+  }
+  fc.restore();
+
+  // Folded (right) half
+  fc.save();
+  const ptsR=clipRectByLine(0,0,FOLD_W,FOLD_H,ax,ay,bx,by,1);
+  if(ptsR.length>=3){
+    fc.beginPath();fc.moveTo(ptsR[0].x,ptsR[0].y);
+    for(let i=1;i<ptsR.length;i++)fc.lineTo(ptsR[i].x,ptsR[i].y);
+    fc.closePath();fc.clip();
+    fc.translate(mx,my);fc.rotate(axisAngle);
+    fc.transform(1,0,0,cosA,0,0);
+    fc.rotate(-axisAngle);fc.translate(-mx,-my);
+    fc.globalAlpha=0.4+0.6*Math.abs(cosA);
+    if(foldAngle<0) fc.filter='hue-rotate(180deg) brightness(.7)';
+    fc.drawImage(photoImg,0,0,FOLD_W,FOLD_H);
+  }
+  fc.restore();
+
+  // Fold line + angle label
+  fc.save();
+  fc.strokeStyle=foldAngle<0?'rgba(255,180,80,.9)':'rgba(127,255,178,.9)';
+  fc.lineWidth=1.5;fc.setLineDash([5,4]);
+  fc.beginPath();fc.moveTo(ax,ay);fc.lineTo(bx,by);fc.stroke();
+  fc.setLineDash([]);
+  fc.fillStyle=foldAngle<0?'rgba(255,180,80,.9)':'rgba(127,255,178,.9)';
+  fc.font='11px monospace';
+  fc.fillText(foldAngle+'°',mx+8,my-6);
+  fc.restore();
+
+  // Draw object markers with side-indicator
+  drawObjectMarkersWithSide(ax,ay,bx,by);
+}
+
+// Show which objects are on which side of fold line
+function axisSign(px,py,ax,ay,bx,by){
+  // positive = right side (will be folded)
+  return (px-ax)*(-(by-ay))+(py-ay)*(bx-ax);
+}
+
+function drawObjectMarkersWithSide(ax,ay,bx,by){
+  snapObjects.forEach(o=>{
+    const {screenPos:sp,screenRadius:sr}=o;
+    const side=axisSign(sp.x,sp.y,ax,ay,bx,by);
+    fc.save();
+    fc.strokeStyle=side>0?'rgba(255,200,80,.7)':'rgba(127,255,178,.5)';
+    fc.lineWidth=1.2;
+    fc.strokeRect(sp.x-sr,sp.y-sr,sr*2,sr*2);
+    // side dot
+    fc.beginPath();
+    fc.arc(sp.x,sp.y,3,0,Math.PI*2);
+    fc.fillStyle=side>0?'rgba(255,200,80,.9)':'rgba(127,255,178,.7)';
+    fc.fill();
+    fc.restore();
+  });
+}
+
+// Mouse on fold canvas
+foldCanvas.addEventListener('mousedown',e=>{
   const r=foldCanvas.getBoundingClientRect();
   foldAxisA={x:e.clientX-r.left,y:e.clientY-r.top};
   foldAxisB={...foldAxisA};
   foldDragging=true;
   foldHint.style.opacity='0';
 });
-foldCanvas.addEventListener('mousemove', e=>{
+foldCanvas.addEventListener('mousemove',e=>{
   if(!foldDragging)return;
   const r=foldCanvas.getBoundingClientRect();
   foldAxisB={x:e.clientX-r.left,y:e.clientY-r.top};
   drawFoldPreview();
 });
-foldCanvas.addEventListener('mouseup', ()=>{
+foldCanvas.addEventListener('mouseup',()=>{
   foldDragging=false;
-  if(foldAxisA&&foldAxisB) drawFoldPreview();
+  if(foldAxisA&&foldAxisB)drawFoldPreview();
 });
 
-document.getElementById('btn-fold').addEventListener('click', ()=>{
-  if(!foldAxisA||!foldAxisB)return;
-  folded=true;
-  drawFoldPreview();
-});
-
-// Place folded photo into 3D scene
-document.getElementById('btn-place').addEventListener('click', ()=>{
-  if(!photoImg)return;
-  placeFoldedPhoto();
+// ═══════════════════════════════════════════════════════════
+//  FOLD & PLACE — pure math, no API
+// ═══════════════════════════════════════════════════════════
+document.getElementById('btn-place').addEventListener('click',()=>{
+  if(!photoImg||!snapObjects.length) return;
+  if(!foldAxisA||!foldAxisB||
+     Math.hypot(foldAxisB.x-foldAxisA.x,foldAxisB.y-foldAxisA.y)<8){
+    showToast('先に折り線を引いてください',true);return;
+  }
+  placeFoldedObjects();
   closePhotoMode();
 });
 
-document.getElementById('btn-cancel').addEventListener('click', closePhotoMode);
+document.getElementById('btn-cancel').addEventListener('click',closePhotoMode);
 
-// ── Place folded photo as 3D geometry ─────────────────────
-function placeFoldedPhoto(){
-  // Create a texture from the current foldCanvas state
-  const tex = new THREE.CanvasTexture(foldCanvas);
-  tex.needsUpdate = true;
+function placeFoldedObjects(){
+  const ax=foldAxisA.x,ay=foldAxisA.y,bx=foldAxisB.x,by=foldAxisB.y;
+  // Fold axis in screen space (normalised to FOLD_W/H)
+  const adx=bx-ax,ady=by-ay,alen=Math.sqrt(adx*adx+ady*ady);
+  // Axis direction (unit) and screen-space normal (pointing to "folded" side, right)
+  const aUx=adx/alen,aUy=ady/alen;
+  const nSx=-aUy,nSy=aUx;  // screen-space normal to fold axis
 
-  // Place in front of where player is looking
-  // Two planes: left half and right half, hinged at fold axis
+  const rad=foldAngle*Math.PI/180;
 
-  const camDir = new THREE.Vector3();
-  camera.getWorldDirection(camDir);
-  const spawnDist = 3.5;
-  const center = P.pos.clone().addScaledVector(camDir, spawnDist);
-  center.y = Math.max(1, center.y);
+  // ── Convert fold axis from screen→world ──────────────────
+  // We need a 3D fold axis and a pivot point in world space.
+  // Strategy: unproject the two axis endpoints onto the scene floor plane (y=0)
+  // and use that as the world-space fold axis.
 
-  const rad = foldAngle * Math.PI / 180;
-  const W3 = 3.5, H3 = 3.5 * FOLD_H/FOLD_W;
-
-  // If no axis drawn, just place flat
-  if(!foldAxisA || !foldAxisB || Math.hypot(foldAxisB.x-foldAxisA.x,foldAxisB.y-foldAxisA.y)<10){
-    const mat = new THREE.MeshBasicMaterial({map:tex, side:THREE.DoubleSide, transparent:true});
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W3,H3), mat);
-    mesh.position.copy(center);
-    mesh.lookAt(P.pos);
-    scene.add(mesh);
-    return;
+  function screenToWorldRay(sx,sy){
+    // NDC
+    const nx=(sx/FOLD_W)*2-1;
+    const ny=1-(sy/FOLD_H)*2;
+    const near=new THREE.Vector3(nx,ny,-1).unproject(camera);
+    const far =new THREE.Vector3(nx,ny, 1).unproject(camera);
+    const dir=far.clone().sub(near).normalize();
+    return {origin:near,dir};
   }
 
-  // Axis in UV space (0..1)
-  const uA = foldAxisA.x/FOLD_W, vA = 1-foldAxisA.y/FOLD_H;
-  const uB = foldAxisB.x/FOLD_W, vB = 1-foldAxisB.y/FOLD_H;
+  function rayHitY(ray,targetY=0){
+    // t = (targetY - oy) / dy
+    const t=(targetY-ray.origin.y)/ray.dir.y;
+    if(t<0) return null; // behind camera
+    return ray.origin.clone().addScaledVector(ray.dir,t);
+  }
 
-  // Left half plane
-  const matL = new THREE.MeshBasicMaterial({map:tex, side:THREE.DoubleSide, transparent:true, opacity:.95});
-  const planeL = new THREE.Mesh(new THREE.PlaneGeometry(W3,H3), matL);
-  planeL.position.copy(center).add(new THREE.Vector3(-.6,0,0));
-  planeL.lookAt(P.pos);
-  scene.add(planeL);
+  const rayA=screenToWorldRay(ax,ay);
+  const rayB=screenToWorldRay(bx,by);
+  // Project onto y=0 (floor), or y=1 if camera looks horizontally
+  const wA=rayHitY(rayA,0)||rayHitY(rayA,1)||camera.position.clone().add(rayA.dir);
+  const wB=rayHitY(rayB,0)||rayHitY(rayB,1)||camera.position.clone().add(rayB.dir.multiplyScalar(5));
 
-  // Right half plane — rotated by fold angle around the hinge
-  const matR = new THREE.MeshBasicMaterial({map:tex, side:THREE.DoubleSide, transparent:true, opacity:.85});
-  const planeR = new THREE.Mesh(new THREE.PlaneGeometry(W3,H3), matR);
+  // World-space fold axis (horizontal)
+  const foldAxisWorld=wB.clone().sub(wA).normalize();
+  // World-space fold pivot point: midpoint of wA-wB
+  const foldPivot=wA.clone().add(wB).multiplyScalar(0.5);
 
-  // Position relative to hinge
-  const hinge = center.clone().add(new THREE.Vector3(0,0,0));
-  planeR.position.copy(hinge).add(new THREE.Vector3(.6,0,0));
+  // Rotation matrix: rotate around foldAxisWorld by foldAngle
+  const rotM=new THREE.Matrix4().makeRotationAxis(foldAxisWorld,rad);
 
-  // Rotate around the vertical hinge axis by fold angle
-  const hingeAxis = new THREE.Vector3(0,1,0);
-  const foldRad = (180-foldAngle)*Math.PI/180;
-  planeR.lookAt(P.pos);
-  planeR.rotateOnWorldAxis(hingeAxis, foldRad * .5);
+  let placedCount=0;
 
-  // Tint folded half darker based on angle
-  matR.opacity = 0.55 + 0.4 * Math.cos(rad);
-  scene.add(planeR);
+  snapObjects.forEach(o=>{
+    const {screenPos:sp,worldPos,meta}=o;
+    const side=axisSign(sp.x,sp.y,ax,ay,bx,by);
+    if(side<=0) return; // left side stays, only right (folded) side gets duplicated
+
+    // ── Compute new world position after fold ──────────────
+    // Vector from pivot to original world pos (on fold plane)
+    const fromPivot=worldPos.clone().sub(foldPivot);
+    // Project fromPivot onto the plane perpendicular to foldAxisWorld
+    const along=foldAxisWorld.clone().multiplyScalar(fromPivot.dot(foldAxisWorld));
+    const perp=fromPivot.clone().sub(along); // component perpendicular to axis
+
+    // Rotate perp by foldAngle around foldAxisWorld
+    const perpRot=perp.clone().applyMatrix4(rotM);
+    // But rotM rotates around world origin — redo properly
+    const perpRotCorrect=new THREE.Vector3();
+    perpRotCorrect.crossVectors(foldAxisWorld,perp);
+    // Rodrigues: v_rot = v*cos + (k×v)*sin + k*(k·v)*(1-cos)
+    const cosR=Math.cos(rad),sinR=Math.sin(rad);
+    const kDotV=foldAxisWorld.dot(perp); // should be ~0 since perp is perpendicular
+    perpRotCorrect
+      .set(perp.x*cosR + perpRotCorrect.x*sinR + foldAxisWorld.x*kDotV*(1-cosR),
+           perp.y*cosR + perpRotCorrect.y*sinR + foldAxisWorld.y*kDotV*(1-cosR),
+           perp.z*cosR + perpRotCorrect.z*sinR + foldAxisWorld.z*kDotV*(1-cosR));
+
+    const newWorldPos=foldPivot.clone().add(along).add(perpRotCorrect);
+    newWorldPos.y=Math.max(0.3,newWorldPos.y); // don't go underground
+
+    // ── Clone geometry ────────────────────────────────────
+    let geo;
+    switch(meta.type){
+      case 'cylinder': geo=new THREE.CylinderGeometry(meta.sx*.5,meta.sx*.5,meta.sy,16); break;
+      default:         geo=new THREE.BoxGeometry(meta.sx,meta.sy,meta.sz); break;
+    }
+
+    const mat=new THREE.MeshStandardMaterial({
+      color:meta.color||0x888888,
+      roughness:meta.roughness||.7,
+      metalness:meta.metalness||0,
+      emissive:meta.emissive||0x000000,
+      emissiveIntensity:meta.emissiveIntensity||0,
+    });
+
+    const clone=new THREE.Mesh(geo,mat);
+    clone.castShadow=true; clone.receiveShadow=true;
+    clone.position.copy(newWorldPos);
+
+    // Rotate the mesh itself by fold angle around fold axis so it faces the folded direction
+    const meshRotAxis=foldAxisWorld.clone();
+    clone.rotateOnWorldAxis(meshRotAxis,rad);
+
+    // Emissive glow
+    if(meta.emissiveIntensity>0.2){
+      const pl=new THREE.PointLight(meta.emissive||meta.color,meta.emissiveIntensity*1.5,6);
+      pl.position.copy(newWorldPos);
+      scene.add(pl);
+    }
+
+    // Drop-in animation
+    const targetY=newWorldPos.y;
+    clone.position.y=targetY+7;
+    scene.add(clone);
+    let t=0;
+    const drop=()=>{
+      t+=0.04;
+      const y=targetY+Math.max(0,(1-t)*(1-t))*7;
+      clone.position.y=y;
+      if(t<1.05) requestAnimationFrame(drop);
+      else clone.position.y=targetY;
+    };
+    setTimeout(()=>requestAnimationFrame(drop),placedCount*100);
+    placedCount++;
+  });
+
+  if(placedCount===0){
+    showToast('折った側にオブジェクトがありません\n折り線の向きを変えてみてください',true);
+  } else {
+    showToast(`✓ ${placedCount}個のオブジェクトを折って配置しました`);
+  }
 }
 
-// ── Input ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+//  Input
+// ═══════════════════════════════════════════════════════════
 const keys={};
 let rdown=false;
 
-document.addEventListener('keydown', e=>{
+document.addEventListener('keydown',e=>{
   keys[e.code]=true;
   if(e.code==='Tab'){
     e.preventDefault();
-    if(photoUI.style.display==='none'||!photoUI.style.display){
-      openPhotoMode();
-    }
+    if(photoUI.style.display!=='block') openPhotoMode();
   }
+  if(e.code==='Escape'&&photoUI.style.display==='block') closePhotoMode();
 });
-document.addEventListener('keyup', e=>keys[e.code]=false);
-
+document.addEventListener('keyup',e=>keys[e.code]=false);
 mainCanvas.addEventListener('mousedown',e=>{if(e.button===2)rdown=true;});
 mainCanvas.addEventListener('mousemove',e=>{
   if(rdown){
-    P.yaw  -=e.movementX*.0022;
+    P.yaw-=e.movementX*.0022;
     P.pitch-=e.movementY*.0022;
     P.pitch=Math.max(-1.2,Math.min(1.2,P.pitch));
   }
@@ -412,16 +543,18 @@ mainCanvas.addEventListener('mousemove',e=>{
 mainCanvas.addEventListener('mouseup',e=>{if(e.button===2)rdown=false;});
 mainCanvas.addEventListener('contextmenu',e=>e.preventDefault());
 
-// ── Player tick ───────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+//  Player tick
+// ═══════════════════════════════════════════════════════════
 function tickPlayer(dt){
   if(photoUI.style.display==='block')return;
-  const fwd  =new THREE.Vector3(-Math.sin(P.yaw),0,-Math.cos(P.yaw));
-  const right=new THREE.Vector3( Math.cos(P.yaw),0,-Math.sin(P.yaw));
-  const dir  =new THREE.Vector3();
-  if(keys['KeyW'])dir.addScaledVector(fwd, 1);
+  const fwd =new THREE.Vector3(-Math.sin(P.yaw),0,-Math.cos(P.yaw));
+  const right=new THREE.Vector3(Math.cos(P.yaw),0,-Math.sin(P.yaw));
+  const dir=new THREE.Vector3();
+  if(keys['KeyW'])dir.addScaledVector(fwd,1);
   if(keys['KeyS'])dir.addScaledVector(fwd,-1);
   if(keys['KeyA'])dir.addScaledVector(right,-1);
-  if(keys['KeyD'])dir.addScaledVector(right, 1);
+  if(keys['KeyD'])dir.addScaledVector(right,1);
   if(dir.length())dir.normalize();
   P.vel.x+=(dir.x*5.5-P.vel.x)*Math.min(dt*13,1);
   P.vel.z+=(dir.z*5.5-P.vel.z)*Math.min(dt*13,1);
@@ -429,30 +562,28 @@ function tickPlayer(dt){
   P.pos.addScaledVector(P.vel,dt);
   if(P.pos.y<=1.0){P.pos.y=1.0;if(P.vel.y<0)P.vel.y=0;P.onGround=true;}
   else P.onGround=false;
-  // platform collisions
-  [[-4,1.1,2],[ 3,1.6,-3],[-2,2.6,-5]].forEach(([px,py,pz])=>{
+  [[-4,1.1,2],[3,1.6,-3],[-2,2.6,-5]].forEach(([px,py,pz])=>{
     if(Math.abs(P.pos.x-px)<1.2&&Math.abs(P.pos.z-pz)<1.2&&P.pos.y<py+.85&&P.pos.y>py-.5){
       P.pos.y=py+.85;if(P.vel.y<0){P.vel.y=0;P.onGround=true;}
     }
   });
-  if(P.pos.y>8){P.pos.y=8;P.vel.y=0;}
-  const half=11;
-  P.pos.x=Math.max(-half,Math.min(half,P.pos.x));
-  P.pos.z=Math.max(-half,Math.min(half,P.pos.z));
+  P.pos.y=Math.min(8,P.pos.y);
+  const h=11;P.pos.x=Math.max(-h,Math.min(h,P.pos.x));P.pos.z=Math.max(-h,Math.min(h,P.pos.z));
   if((keys['Space']||keys['ArrowUp'])&&P.onGround){P.vel.y=8;P.onGround=false;}
-  pmesh.position.set(P.pos.x,P.pos.y-.85+.7,P.pos.z);
+  pmesh.position.set(P.pos.x,P.pos.y-.15,P.pos.z);
   camera.position.copy(P.pos);
   camera.rotation.order='YXZ';
   camera.rotation.y=P.yaw;
   camera.rotation.x=P.pitch;
 }
 
-// ── Main loop ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+//  Main loop
+// ═══════════════════════════════════════════════════════════
 const clock=new THREE.Clock();
-(function animate(){
-  requestAnimationFrame(animate);
-  const dt=Math.min(clock.getDelta(),.05);
-  tickPlayer(dt);
+(function loop(){
+  requestAnimationFrame(loop);
+  tickPlayer(Math.min(clock.getDelta(),.05));
   renderer.render(scene,camera);
 })();
 
