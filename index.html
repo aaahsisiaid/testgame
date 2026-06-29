@@ -2,170 +2,491 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>FOLD prototype</title>
+<title>FOLD prototype v2</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: #0a0a0f; overflow: hidden; font-family: monospace; }
-canvas { display: block; }
-#info {
-  position: fixed; top: 16px; left: 16px;
-  font-size: 11px; color: #333; line-height: 2; pointer-events: none;
-}
-#fold-count {
-  position: fixed; top: 16px; right: 16px;
-  font-size: 11px; color: #333; text-align: right; pointer-events: none;
-}
-#strength-wrap {
-  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  pointer-events: none;
-}
-#strength-label { font-size: 11px; color: #555; letter-spacing: 0.1em; }
-#strength-bar-bg { width: 200px; height: 4px; background: #1a1a24; border-radius: 99px; }
-#strength-bar { height: 4px; border-radius: 99px; background: #7fffb2; width: 100%; transition: width 0.3s, background 0.3s; }
-#fold-hint {
-  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
-  font-size: 12px; color: #7fffb2; letter-spacing: 0.08em;
-  pointer-events: none; transition: opacity 0.5s;
-}
-#tear-warning {
-  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  font-size: 13px; color: #ff7f50; letter-spacing: 0.1em;
-  opacity: 0; pointer-events: none; transition: opacity 0.3s;
-}
-#title-overlay {
-  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  text-align: center; pointer-events: none; transition: opacity 1s;
-}
-#title-overlay h1 { font-size: 48px; font-weight: 400; color: #7fffb2; letter-spacing: 0.3em; margin-bottom: 8px; }
-#title-overlay p  { font-size: 12px; color: #444; letter-spacing: 0.15em; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;overflow:hidden;font-family:monospace}
+canvas{display:block}
+#hud{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#info{position:fixed;top:16px;left:16px;font-size:11px;color:#444;line-height:2.2}
+#info span{color:#7fffb2}
+#strength-wrap{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px}
+#slabel{font-size:10px;color:#444;letter-spacing:.12em}
+#sbg{width:180px;height:3px;background:#111;border-radius:99px}
+#sbar{height:3px;border-radius:99px;background:#7fffb2;width:100%;transition:width .2s,background .2s}
+#msg{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);font-size:12px;color:#7fffb2;letter-spacing:.08em;text-align:center;line-height:1.8}
+#crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:12px;height:12px;opacity:.5}
+#crosshair::before,#crosshair::after{content:'';position:absolute;background:#7fffb2}
+#crosshair::before{width:1px;height:100%;left:50%;transform:translateX(-50%)}
+#crosshair::after{width:100%;height:1px;top:50%;transform:translateY(-50%)}
+#illusion-hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:13px;color:#ff7f50;letter-spacing:.1em;opacity:0;pointer-events:none;transition:opacity .4s;text-align:center}
+#title{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;transition:opacity 1s}
+#title h1{font-size:52px;font-weight:400;color:#7fffb2;letter-spacing:.35em;margin-bottom:10px}
+#title p{font-size:11px;color:#333;letter-spacing:.18em}
+#title .sub{font-size:10px;color:#222;margin-top:16px}
 </style>
 </head>
 <body>
-<div id="info">WASD — 移動<br>SPACE — ジャンプ<br>F — 折る / 広げる<br>マウス — 視点</div>
-<div id="fold-count">折り回数: <span id="fc">0</span> / 3</div>
-<div id="fold-hint">[ クリックして開始 ] → [ F ] で世界を折る</div>
-<div id="strength-wrap">
-  <div id="strength-label">PAPER STRENGTH</div>
-  <div id="strength-bar-bg"><div id="strength-bar"></div></div>
+<div id="hud">
+  <div id="info">
+    WASD <span>移動</span> &nbsp; SPACE <span>ジャンプ</span><br>
+    マウス左ドラッグ <span>折り軸を引く</span><br>
+    F <span>引いた軸で折る</span> &nbsp; R <span>全リセット</span>
+  </div>
+  <div id="crosshair"></div>
+  <div id="msg">クリックして開始</div>
+  <div id="strength-wrap">
+    <div id="slabel">PAPER STRENGTH</div>
+    <div id="sbg"><div id="sbar"></div></div>
+  </div>
+  <div id="illusion-hint"></div>
 </div>
-<div id="tear-warning">— 紙が破れそうだ —</div>
-<div id="title-overlay">
+<div id="title">
   <h1>FOLD</h1>
   <p>正しい場所に立てば、世界は折れる。</p>
+  <div class="sub">クリックして開始</div>
 </div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a0f);
-scene.fog = new THREE.Fog(0x0a0a0f, 20, 60);
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 100);
-camera.position.set(0,2,0);
+// ============================================================
+//  FOLD prototype v2
+//  - 任意軸折り（マウスドラッグで折り軸を地面に引く）
+//  - 折り面の物理当たり判定
+//  - 遠近錯覚ステージ（遠い小台 = 実は大きい）
+// ============================================================
+
+// --- Renderer / Scene ---
+const W = innerWidth, H = innerHeight;
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth,innerHeight);
+renderer.setSize(W,H);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0x7fffb2,0.15));
-const dir = new THREE.DirectionalLight(0xffffff,0.8);
-dir.position.set(5,10,5); dir.castShadow=true; scene.add(dir);
-const pt = new THREE.PointLight(0xff7f50,0.4,20);
-pt.position.set(-3,4,-3); scene.add(pt);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0f);
+scene.fog = new THREE.Fog(0x0a0a0f, 25, 70);
 
-const RES=30,SIZE=14;
-const floorGeo = new THREE.PlaneGeometry(SIZE,SIZE,RES,RES);
+const camera = new THREE.PerspectiveCamera(70, W/H, 0.1, 100);
+camera.position.set(0, 1.7, 0);
+
+// --- Lights ---
+scene.add(new THREE.AmbientLight(0x7fffb2, 0.12));
+const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+sun.position.set(8,14,6); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.near=0.1; sun.shadow.camera.far=80;
+sun.shadow.camera.left=-20; sun.shadow.camera.right=20;
+sun.shadow.camera.top=20; sun.shadow.camera.bottom=-20;
+scene.add(sun);
+scene.add(new THREE.PointLight(0xff7f50, 0.5, 25));
+
+// ============================================================
+//  FOLDABLE FLOOR
+// ============================================================
+const RES = 40, SIZE = 20;
+const floorGeo = new THREE.PlaneGeometry(SIZE, SIZE, RES, RES);
 floorGeo.rotateX(-Math.PI/2);
-const origPos = floorGeo.attributes.position.array.slice();
-const floor = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({color:0x12121c,side:THREE.DoubleSide,roughness:0.9}));
-floor.receiveShadow=true; scene.add(floor);
-const wireGeo = new THREE.PlaneGeometry(SIZE,SIZE,RES,RES);
-wireGeo.rotateX(-Math.PI/2);
-const wire = new THREE.Mesh(wireGeo, new THREE.MeshBasicMaterial({color:0x7fffb2,wireframe:true,transparent:true,opacity:0.08}));
-wire.position.y=0.001; scene.add(wire);
+const origVerts = floorGeo.attributes.position.array.slice();
 
-const wmat = new THREE.MeshStandardMaterial({color:0x0f0f18,roughness:1});
-[[0,2.5,-SIZE/2],[0,2.5,SIZE/2]].forEach(([x,y,z])=>{const m=new THREE.Mesh(new THREE.BoxGeometry(SIZE,5,0.2),wmat);m.position.set(x,y,z);scene.add(m);});
-[[-SIZE/2,2.5,0],[SIZE/2,2.5,0]].forEach(([x,y,z])=>{const m=new THREE.Mesh(new THREE.BoxGeometry(0.2,5,SIZE),wmat);m.position.set(x,y,z);scene.add(m);});
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x13131d, side: THREE.DoubleSide, roughness: 0.95, metalness: 0.05
+});
+const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+floorMesh.receiveShadow = true;
+scene.add(floorMesh);
 
-const goal = new THREE.Mesh(new THREE.BoxGeometry(2,0.2,2),new THREE.MeshStandardMaterial({color:0xff7f50,emissive:0xff3300,emissiveIntensity:0.3}));
-goal.position.set(4,3.5,-4); scene.add(goal);
-const gl2 = new THREE.PointLight(0xff7f50,1,6); gl2.position.copy(goal.position); scene.add(gl2);
+// wireframe overlay
+const wGeo = new THREE.PlaneGeometry(SIZE, SIZE, RES, RES);
+wGeo.rotateX(-Math.PI/2);
+const wMesh = new THREE.Mesh(wGeo,
+  new THREE.MeshBasicMaterial({color:0x7fffb2,wireframe:true,transparent:true,opacity:0.06})
+);
+wMesh.position.y = 0.002;
+scene.add(wMesh);
 
-const player = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,1.6,16),new THREE.MeshStandardMaterial({color:0x7fffb2,emissive:0x7fffb2,emissiveIntensity:0.2}));
-player.position.set(0,1,3); player.castShadow=true; scene.add(player);
+// --- Fold state ---
+// Each fold: { axis: {px,pz,dx,dz (normalized dir of axis line)}, angle, target }
+const folds = [];        // applied folds (max 3)
+let pendingAxis = null;  // axis being drawn
+let strength = 100;
 
-const vel=new THREE.Vector3();
-let onGround=false,foldAngle=0,targetFold=0,foldCount=0,strength=100;
-let isLocked=false,yaw=0,pitch=0,titleShown=true,won=false;
-const keys={};
+// ============================================================
+//  STAGE OBJECTS
+// ============================================================
+const stageMat = new THREE.MeshStandardMaterial({color:0x0e0e18,roughness:1});
+const accentMat = new THREE.MeshStandardMaterial({color:0xff7f50,emissive:0xff3300,emissiveIntensity:0.4});
+const illusionMat = new THREE.MeshStandardMaterial({color:0xb0a0ff,emissive:0x6040ff,emissiveIntensity:0.3});
 
-renderer.domElement.addEventListener('click',()=>{
-  if(titleShown){const ov=document.getElementById('title-overlay');ov.style.opacity='0';setTimeout(()=>ov.style.display='none',1000);titleShown=false;document.getElementById('fold-hint').textContent='[ F ] で世界を折る';}
+// Walls
+function addBox(x,y,z,w,h,d,mat){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat||stageMat);
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true;
+  scene.add(m); return m;
+}
+
+// Boundary walls
+addBox(0,2.5,-SIZE/2, SIZE,5,0.3);
+addBox(0,2.5, SIZE/2, SIZE,5,0.3);
+addBox(-SIZE/2,2.5,0, 0.3,5,SIZE);
+addBox( SIZE/2,2.5,0, 0.3,5,SIZE);
+
+// --- GOAL: high platform, reachable only by folding ---
+const goalPlatform = addBox(6, 4, -7, 3, 0.3, 3, accentMat);
+const goalLight = new THREE.PointLight(0xff7f50, 1.5, 8);
+goalLight.position.set(6,5,-7); scene.add(goalLight);
+
+// --- ILLUSION STAGE ---
+// Far small-looking cube (actually large, placed far away)
+// From starting position it looks the same height as the near cube
+const nearCube  = addBox(-4, 0.5,  2, 1, 1, 1, illusionMat); // near, small
+const farCube   = addBox(-4, 2.0, -8, 4, 4, 4, illusionMat); // far, LARGE (looks same from start)
+
+// Illusion hint trigger zone (near the near cube)
+const illusionZone = new THREE.Vector3(-4, 0, 2);
+
+// ============================================================
+//  PLAYER
+// ============================================================
+const playerMesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.28, 0.28, 1.4, 12),
+  new THREE.MeshStandardMaterial({color:0x7fffb2, emissive:0x7fffb2, emissiveIntensity:0.15})
+);
+playerMesh.castShadow = true;
+scene.add(playerMesh);
+
+const player = {
+  pos: new THREE.Vector3(0, 1, 5),
+  vel: new THREE.Vector3(),
+  yaw: 0, pitch: 0,
+  onGround: false,
+  height: 0.8,
+};
+
+// ============================================================
+//  FOLD MATH
+// ============================================================
+// Apply all folds to a single vertex (original position)
+function applyAllFolds(ox, oy, oz) {
+  let x=ox, y=oy, z=oz;
+  for (const fold of folds) {
+    if (Math.abs(fold.angle) < 0.001) continue;
+    // Project point onto axis-perpendicular direction
+    // Axis line: point (fold.px, fold.pz), direction (fold.dx, fold.dz)
+    const rx = x - fold.px;
+    const rz = z - fold.pz;
+    // Component along axis
+    const along = rx * fold.dx + rz * fold.dz;
+    // Component perpendicular to axis (signed)
+    const perp = rx * (-fold.dz) + rz * fold.dx;
+    // Only fold the "positive perp" side
+    if (perp > 0) {
+      const dist = perp;
+      const ny = y + dist * Math.sin(fold.angle);
+      const np = fold.px + along * fold.dx - dist * Math.cos(fold.angle) * (-fold.dz)
+               + fold.pz + along * fold.dz;
+      // Reconstruct new x,z
+      const newPerp = -dist * Math.cos(fold.angle);
+      x = fold.px + along * fold.dx + newPerp * (-fold.dz);
+      z = fold.pz + along * fold.dz + newPerp * fold.dx;
+      y = ny;
+    }
+  }
+  return {x,y,z};
+}
+
+function updateFloorMesh() {
+  const pos = floorGeo.attributes.position;
+  const wpos = wGeo.attributes.position;
+  for (let i=0; i<pos.count; i++) {
+    const ox=origVerts[i*3], oy=origVerts[i*3+1], oz=origVerts[i*3+2];
+    const {x,y,z} = applyAllFolds(ox,oy,oz);
+    pos.setXYZ(i,x,y,z);
+    wpos.setXYZ(i,x,y+0.002,z);
+  }
+  pos.needsUpdate = true;
+  wpos.needsUpdate = true;
+  floorGeo.computeVertexNormals();
+}
+
+// Get floor Y at world XZ by sampling nearby vertices
+function getFloorHeightAt(wx, wz) {
+  // Find the closest triangle on the folded mesh and return its Y
+  // Simplified: sample grid of original verts near the point, apply folds, find lowest above
+  let bestY = -99;
+  const step = SIZE/RES;
+  const searchR = step * 2;
+  for (let gi=0; gi<=RES; gi++) {
+    for (let gj=0; gj<=RES; gj++) {
+      const ox = gj * step - SIZE/2;
+      const oz = gi * step - SIZE/2;
+      const {x,y,z} = applyAllFolds(ox,0,oz);
+      const dx = x - wx, dz = z - wz;
+      if (dx*dx + dz*dz < searchR*searchR) {
+        if (y > bestY) bestY = y;
+      }
+    }
+  }
+  return bestY < -90 ? 0 : bestY;
+}
+
+// ============================================================
+//  FOLD AXIS DRAWING (mouse drag on floor)
+// ============================================================
+let isDragging = false;
+let dragStart = null, dragEnd = null;
+const raycaster = new THREE.Raycaster();
+
+// Visual axis line
+const axisLineMat = new THREE.LineBasicMaterial({color:0x7fffb2,transparent:true,opacity:0.8});
+const axisLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
+const axisLine = new THREE.Line(axisLineGeo, axisLineMat);
+scene.add(axisLine);
+
+function getFloorIntersect(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const nx = ((event.clientX - rect.left) / rect.width)  * 2 - 1;
+  const ny =-((event.clientY - rect.top)  / rect.height) * 2 + 1;
+  raycaster.setFromCamera({x:nx,y:ny}, camera);
+  // Ray-plane intersect at y=0
+  const plane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+  const pt = new THREE.Vector3();
+  raycaster.ray.intersectPlane(plane, pt);
+  return pt;
+}
+
+// ============================================================
+//  INPUT
+// ============================================================
+const keys = {};
+let isLocked = false;
+let titleShown = true;
+
+renderer.domElement.addEventListener('click', () => {
+  if (titleShown) {
+    const t = document.getElementById('title');
+    t.style.opacity = '0';
+    setTimeout(()=>t.style.display='none',1000);
+    titleShown = false;
+    document.getElementById('msg').textContent = 'マウスドラッグで折り軸を引き、Fで折る';
+  }
   renderer.domElement.requestPointerLock();
 });
-document.addEventListener('pointerlockchange',()=>{isLocked=document.pointerLockElement===renderer.domElement;});
-document.addEventListener('mousemove',e=>{if(!isLocked)return;yaw-=e.movementX*0.002;pitch-=e.movementY*0.002;pitch=Math.max(-Math.PI/2.5,Math.min(Math.PI/2.5,pitch));});
-document.addEventListener('keydown',e=>{
-  keys[e.code]=true;
-  if(e.code==='KeyF'){
-    if(targetFold===0&&foldCount<3&&strength>10){targetFold=Math.PI;foldCount++;strength-=30;document.getElementById('fold-hint').style.opacity='0';document.getElementById('fc').textContent=foldCount;}
-    else if(targetFold!==0){targetFold=0;}
+
+document.addEventListener('pointerlockchange', () => {
+  isLocked = document.pointerLockElement === renderer.domElement;
+});
+
+document.addEventListener('mousemove', e => {
+  if (!isLocked) return;
+  player.yaw   -= e.movementX * 0.0022;
+  player.pitch -= e.movementY * 0.0022;
+  player.pitch  = Math.max(-1.2, Math.min(1.2, player.pitch));
+});
+
+// Drag to draw fold axis (only when NOT pointer-locked)
+renderer.domElement.addEventListener('mousedown', e => {
+  if (isLocked) return;
+  const pt = getFloorIntersect(e);
+  if (!pt) return;
+  isDragging = true;
+  dragStart = pt.clone();
+  dragEnd = pt.clone();
+});
+renderer.domElement.addEventListener('mousemove', e => {
+  if (!isDragging || isLocked) return;
+  const pt = getFloorIntersect(e);
+  if (!pt) return;
+  dragEnd = pt.clone();
+  const pts = [dragStart.clone(), dragEnd.clone()];
+  axisLineGeo.setFromPoints(pts);
+  axisLineGeo.attributes.position.needsUpdate = true;
+});
+renderer.domElement.addEventListener('mouseup', () => {
+  if (!isDragging) return;
+  isDragging = false;
+  if (!dragStart || !dragEnd) return;
+  const dx = dragEnd.x - dragStart.x;
+  const dz = dragEnd.z - dragStart.z;
+  const len = Math.sqrt(dx*dx+dz*dz);
+  if (len < 0.5) return; // too short
+  pendingAxis = {
+    px: dragStart.x, pz: dragStart.z,
+    dx: dx/len, dz: dz/len
+  };
+  document.getElementById('msg').textContent = '軸が引かれた — [ F ] で折る';
+});
+
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyF' && pendingAxis && folds.length < 3 && strength > 15) {
+    folds.push({...pendingAxis, angle: 0, target: Math.PI * 0.85});
+    pendingAxis = null;
+    strength -= 28;
+    // Clear axis line
+    axisLineGeo.setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    axisLineGeo.attributes.position.needsUpdate = true;
+    document.getElementById('msg').textContent = '折れた — ドラッグで次の軸を引く';
+  }
+  if (e.code === 'KeyR') {
+    folds.length = 0;
+    pendingAxis = null;
+    strength = 100;
+    player.pos.set(0,1,5);
+    player.vel.set(0,0,0);
+    updateFloorMesh();
+    document.getElementById('msg').textContent = 'リセット — マウスドラッグで折り軸を引き、Fで折る';
+  }
+  // ESC releases pointer lock (browser default) — allow drag mode
+  if (e.code === 'Escape') {
+    document.getElementById('msg').textContent = 'マウスドラッグで折り軸を引き、Fで折る（クリックで視点操作に戻る）';
   }
 });
-document.addEventListener('keyup',e=>{keys[e.code]=false;});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
 
-function applyFold(angle){
-  const pos=floorGeo.attributes.position,wpos=wireGeo.attributes.position;
-  for(let i=0;i<pos.count;i++){
-    const ox=origPos[i*3],oy=origPos[i*3+1],oz=origPos[i*3+2];
-    if(oz<0){const d=-oz;pos.setXYZ(i,ox,d*Math.sin(angle),-(d*Math.cos(angle)));wpos.setXYZ(i,ox,d*Math.sin(angle)+0.01,-(d*Math.cos(angle)));}
-    else{pos.setXYZ(i,ox,oy,oz);wpos.setXYZ(i,ox,oy+0.01,oz);}
+// ============================================================
+//  ILLUSION CHECK
+// ============================================================
+let illusionTriggered = false;
+function checkIllusion() {
+  const d = player.pos.distanceTo(illusionZone);
+  const hint = document.getElementById('illusion-hint');
+  if (d < 3 && !illusionTriggered) {
+    hint.textContent = '— この2つの箱、同じ大きさに見えた？ —\n近づいてみろ';
+    hint.style.opacity = '1';
+    illusionTriggered = true;
+  } else if (d < 1.5) {
+    hint.textContent = '— 遠くの箱は実は4倍の大きさだった —\n遠近感が世界を騙す';
+    hint.style.color = '#ff7f50';
+  } else if (d > 5) {
+    illusionTriggered = false;
+    hint.style.opacity = '0';
+    hint.style.color = '#ff7f50';
   }
-  pos.needsUpdate=true;wpos.needsUpdate=true;floorGeo.computeVertexNormals();
 }
-function getFloorY(x,z){if(z>=0)return 0;return(-z)*Math.sin(foldAngle);}
 
-const clock=new THREE.Clock();
-function animate(){
+// ============================================================
+//  GOAL CHECK
+// ============================================================
+let won = false;
+function checkGoal() {
+  if (won) return;
+  const d = new THREE.Vector3(6,4,-7);
+  if (player.pos.distanceTo(d) < 2) {
+    won = true;
+    document.getElementById('msg').textContent = '— GOAL —\n世界を折って辿り着いた';
+    document.getElementById('msg').style.color = '#7fffb2';
+  }
+}
+
+// ============================================================
+//  MAIN LOOP
+// ============================================================
+const clock = new THREE.Clock();
+function animate() {
   requestAnimationFrame(animate);
-  const dt=Math.min(clock.getDelta(),0.05);
-  foldAngle+=(targetFold-foldAngle)*dt*4;
-  applyFold(foldAngle);
-  if(strength<100)strength=Math.min(100,strength+dt*5);
-  const bar=document.getElementById('strength-bar');
-  bar.style.width=strength+'%';
-  bar.style.background=strength<30?'#ff7f50':strength<60?'#ffcc44':'#7fffb2';
-  document.getElementById('tear-warning').style.opacity=strength<25?'1':'0';
-  if(isLocked){
-    const fwd=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
-    const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-    const d=new THREE.Vector3();
-    if(keys['KeyW'])d.addScaledVector(fwd,1);
-    if(keys['KeyS'])d.addScaledVector(fwd,-1);
-    if(keys['KeyA'])d.addScaledVector(right,-1);
-    if(keys['KeyD'])d.addScaledVector(right,1);
-    d.normalize();
-    vel.x+=(d.x*5-vel.x)*dt*10;vel.z+=(d.z*5-vel.z)*dt*10;vel.y-=20*dt;
-    player.position.addScaledVector(vel,dt);
-    const fy=getFloorY(player.position.x,player.position.z);
-    if(player.position.y<fy+0.8){player.position.y=fy+0.8;if(vel.y<0)vel.y=0;onGround=true;}else{onGround=false;}
-    if(player.position.y>4.5){player.position.y=4.5;vel.y=0;}
-    const half=SIZE/2-0.5;
-    player.position.x=Math.max(-half,Math.min(half,player.position.x));
-    player.position.z=Math.max(-half,Math.min(half,player.position.z));
-    if(keys['Space']&&onGround){vel.y=7;onGround=false;}
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  // Animate folds
+  let needUpdate = false;
+  for (const f of folds) {
+    if (Math.abs(f.angle - f.target) > 0.001) {
+      f.angle += (f.target - f.angle) * dt * 5;
+      needUpdate = true;
+    }
   }
-  camera.position.copy(player.position).add(new THREE.Vector3(0,0.5,0));
-  camera.rotation.order='YXZ';camera.rotation.y=yaw;camera.rotation.x=pitch;
-  if(!won&&player.position.distanceTo(goal.position)<1.5){
-    won=true;const tw=document.getElementById('tear-warning');
-    tw.textContent='— GOAL! 世界を折って辿り着いた —';tw.style.color='#7fffb2';tw.style.opacity='1';
-    setTimeout(()=>{tw.style.opacity='0';},3000);
+  if (needUpdate) updateFloorMesh();
+
+  // Strength regen
+  if (strength < 100) strength = Math.min(100, strength + dt*4);
+  const sbar = document.getElementById('sbar');
+  sbar.style.width = strength + '%';
+  sbar.style.background = strength<30?'#ff7f50':strength<60?'#ffcc44':'#7fffb2';
+
+  // Player movement
+  if (isLocked) {
+    const fwd   = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+    const right = new THREE.Vector3( Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+    const dir   = new THREE.Vector3();
+    if (keys['KeyW']) dir.addScaledVector(fwd,   1);
+    if (keys['KeyS']) dir.addScaledVector(fwd,  -1);
+    if (keys['KeyA']) dir.addScaledVector(right, -1);
+    if (keys['KeyD']) dir.addScaledVector(right,  1);
+    if (dir.length() > 0) dir.normalize();
+
+    const spd = 5.5;
+    player.vel.x += (dir.x*spd - player.vel.x) * Math.min(dt*12, 1);
+    player.vel.z += (dir.z*spd - player.vel.z) * Math.min(dt*12, 1);
+    player.vel.y -= 22 * dt; // gravity
+
+    player.pos.addScaledVector(player.vel, dt);
+
+    // Floor collision — sample folded height
+    const fy = getFloorHeightAt(player.pos.x, player.pos.z);
+    const groundY = fy + player.height;
+    if (player.pos.y <= groundY) {
+      player.pos.y = groundY;
+      if (player.vel.y < 0) player.vel.y = 0;
+      player.onGround = true;
+    } else {
+      player.onGround = false;
+    }
+
+    // Goal platform collision
+    if (player.pos.x>4.5&&player.pos.x<7.5 && player.pos.z>-8.5&&player.pos.z<-5.5) {
+      const gy = 4.15 + player.height;
+      if (player.pos.y < gy && player.pos.y > 3.5) {
+        player.pos.y = gy;
+        if (player.vel.y < 0) { player.vel.y = 0; player.onGround = true; }
+      }
+    }
+
+    // nearCube top collision
+    if (Math.abs(player.pos.x+4)<0.8 && Math.abs(player.pos.z-2)<0.8) {
+      const cy = 1.0 + player.height;
+      if (player.pos.y < cy && player.pos.y > 0.5) {
+        player.pos.y = cy; if(player.vel.y<0){player.vel.y=0;player.onGround=true;}
+      }
+    }
+
+    // Ceiling
+    if (player.pos.y > 5.5) { player.pos.y = 5.5; player.vel.y = 0; }
+
+    // Boundary
+    const half = SIZE/2 - 0.6;
+    player.pos.x = Math.max(-half, Math.min(half, player.pos.x));
+    player.pos.z = Math.max(-half, Math.min(half, player.pos.z));
+
+    // Jump
+    if ((keys['Space']||keys['ArrowUp']) && player.onGround) {
+      player.vel.y = 8;
+      player.onGround = false;
+    }
   }
-  renderer.render(scene,camera);
+
+  // Sync player mesh
+  playerMesh.position.copy(player.pos);
+  playerMesh.position.y = player.pos.y - player.height + 0.7;
+
+  // Camera = player eyes
+  camera.position.copy(player.pos).add(new THREE.Vector3(0, 0.15, 0));
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = player.yaw;
+  camera.rotation.x = player.pitch;
+
+  checkIllusion();
+  checkGoal();
+
+  renderer.render(scene, camera);
 }
 animate();
-window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
 </script>
 </body>
 </html>
