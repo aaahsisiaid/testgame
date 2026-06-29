@@ -81,7 +81,7 @@ sun.shadow.camera.left=-22;sun.shadow.camera.right=22;
 sun.shadow.camera.top=22;sun.shadow.camera.bottom=-22;
 sun.shadow.camera.far=80;
 scene.add(sun);
-scene.add(Object.assign(new THREE.PointLight(0x4466ff,0.3,30),{position:{x:-5,y:5,z:5}}));
+const fillLight=new THREE.PointLight(0x4466ff,0.3,30);fillLight.position.set(-5,5,5);scene.add(fillLight);
 
 // ── Stage ─────────────────────────────────────────────────
 const matFloor = new THREE.MeshStandardMaterial({color:0x11111a,roughness:.95});
