@@ -2,64 +2,44 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>FOLD prototype v2</title>
+<title>FOLD v4 — Camera Projection Fold</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a0f;overflow:hidden;font-family:monospace}
+body{background:#0a0a0f;overflow:hidden;font-family:monospace;user-select:none}
 canvas{display:block}
-#hud{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none}
-#info{position:fixed;top:16px;left:16px;font-size:11px;color:#444;line-height:2.2}
-#info span{color:#7fffb2}
-#strength-wrap{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px}
-#slabel{font-size:10px;color:#444;letter-spacing:.12em}
-#sbg{width:180px;height:3px;background:#111;border-radius:99px}
-#sbar{height:3px;border-radius:99px;background:#7fffb2;width:100%;transition:width .2s,background .2s}
-#msg{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);font-size:12px;color:#7fffb2;letter-spacing:.08em;text-align:center;line-height:1.8}
-#crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:12px;height:12px;opacity:.5}
-#crosshair::before,#crosshair::after{content:'';position:absolute;background:#7fffb2}
-#crosshair::before{width:1px;height:100%;left:50%;transform:translateX(-50%)}
-#crosshair::after{width:100%;height:1px;top:50%;transform:translateY(-50%)}
-#illusion-hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:13px;color:#ff7f50;letter-spacing:.1em;opacity:0;pointer-events:none;transition:opacity .4s;text-align:center}
-#title{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;transition:opacity 1s}
-#title h1{font-size:52px;font-weight:400;color:#7fffb2;letter-spacing:.35em;margin-bottom:10px}
-#title p{font-size:11px;color:#333;letter-spacing:.18em}
-#title .sub{font-size:10px;color:#222;margin-top:16px}
+#ui{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#info{position:fixed;top:16px;left:16px;font-size:11px;color:#444;line-height:2.4}
+#info b{color:#7fffb2}
+#info i{color:#ff7f50}
+#mode-badge{position:fixed;top:16px;right:16px;font-size:11px;padding:4px 12px;border-radius:99px;border:.5px solid;letter-spacing:.1em}
+#msg{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);font-size:12px;color:#7fffb2;letter-spacing:.08em;text-align:center;line-height:1.9;pointer-events:none}
+#sbg-wrap{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none}
+#slabel{font-size:10px;color:#333;letter-spacing:.12em}
+#sbg{width:160px;height:2px;background:#111;border-radius:99px}
+#sbar{height:2px;border-radius:99px;background:#7fffb2;width:100%;transition:width .2s,background .3s}
+/* fold range selector overlay on canvas */
+#overlay{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none}
 </style>
 </head>
 <body>
-<div id="hud">
+<div id="ui">
   <div id="info">
-    WASD <span>移動</span> &nbsp; SPACE <span>ジャンプ</span><br>
-    マウス左ドラッグ <span>折り軸を引く</span><br>
-    F <span>引いた軸で折る</span> &nbsp; R <span>全リセット</span>
+    <b>TAB</b> モード切替<br>
+    <b>[移動モード]</b> WASD移動 右ドラッグ視点<br>
+    <b>[折りモード]</b> 左ドラッグで折り軸を引く<br>
+    <b>F</b> 折る &nbsp;<b>R</b> リセット &nbsp;<b>Z</b> 一個戻す
   </div>
-  <div id="crosshair"></div>
-  <div id="msg">クリックして開始</div>
-  <div id="strength-wrap">
-    <div id="slabel">PAPER STRENGTH</div>
-    <div id="sbg"><div id="sbar"></div></div>
-  </div>
-  <div id="illusion-hint"></div>
+  <div id="mode-badge">MOVE</div>
+  <div id="msg">TABキーで折りモードに切替 → ドラッグで軸を引いてFで折る</div>
+  <div id="sbg-wrap"><div id="slabel">PAPER STRENGTH</div><div id="sbg"><div id="sbar"></div></div></div>
 </div>
-<div id="title">
-  <h1>FOLD</h1>
-  <p>正しい場所に立てば、世界は折れる。</p>
-  <div class="sub">クリックして開始</div>
-</div>
+<canvas id="overlay-canvas" style="position:fixed;top:0;left:0;pointer-events:none"></canvas>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ============================================================
-//  FOLD prototype v2
-//  - 任意軸折り（マウスドラッグで折り軸を地面に引く）
-//  - 折り面の物理当たり判定
-//  - 遠近錯覚ステージ（遠い小台 = 実は大きい）
-// ============================================================
-
-// --- Renderer / Scene ---
-const W = innerWidth, H = innerHeight;
+// ── renderer ──────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(W,H);
+renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
@@ -68,424 +48,399 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0a0f);
 scene.fog = new THREE.Fog(0x0a0a0f, 25, 70);
 
-const camera = new THREE.PerspectiveCamera(70, W/H, 0.1, 100);
-camera.position.set(0, 1.7, 0);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 100);
+camera.position.set(0, 3, 8);
+camera.lookAt(0,1,0);
 
-// --- Lights ---
-scene.add(new THREE.AmbientLight(0x7fffb2, 0.12));
+// 2D overlay canvas for drawing fold axis
+const oc = document.getElementById('overlay-canvas');
+oc.width = innerWidth; oc.height = innerHeight;
+const ctx2 = oc.getContext('2d');
+
+// ── lights ────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x8888ff, 0.13));
 const sun = new THREE.DirectionalLight(0xffffff, 0.9);
-sun.position.set(8,14,6); sun.castShadow=true;
+sun.position.set(8,14,6); sun.castShadow = true;
 sun.shadow.mapSize.set(2048,2048);
-sun.shadow.camera.near=0.1; sun.shadow.camera.far=80;
-sun.shadow.camera.left=-20; sun.shadow.camera.right=20;
-sun.shadow.camera.top=20; sun.shadow.camera.bottom=-20;
+sun.shadow.camera.left=-22; sun.shadow.camera.right=22;
+sun.shadow.camera.top=22; sun.shadow.camera.bottom=-22;
+sun.shadow.camera.far=80;
 scene.add(sun);
-scene.add(new THREE.PointLight(0xff7f50, 0.5, 25));
 
-// ============================================================
-//  FOLDABLE FLOOR
-// ============================================================
-const RES = 40, SIZE = 20;
-const floorGeo = new THREE.PlaneGeometry(SIZE, SIZE, RES, RES);
-floorGeo.rotateX(-Math.PI/2);
-const origVerts = floorGeo.attributes.position.array.slice();
+// ── materials ─────────────────────────────────────────────
+const matFloor = new THREE.MeshStandardMaterial({color:0x11111a,roughness:.95});
+const matWall  = new THREE.MeshStandardMaterial({color:0x0e0e18,roughness:1});
+const matGoal  = new THREE.MeshStandardMaterial({color:0xff7f50,emissive:0xff4400,emissiveIntensity:.4});
+const matA     = new THREE.MeshStandardMaterial({color:0x4488ff,emissive:0x2244aa,emissiveIntensity:.25});
+const matB     = new THREE.MeshStandardMaterial({color:0x44ffaa,emissive:0x22aa66,emissiveIntensity:.2});
+const matC     = new THREE.MeshStandardMaterial({color:0xffcc44,emissive:0xaa8822,emissiveIntensity:.2});
 
-const floorMat = new THREE.MeshStandardMaterial({
-  color: 0x13131d, side: THREE.DoubleSide, roughness: 0.95, metalness: 0.05
-});
-const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-floorMesh.receiveShadow = true;
-scene.add(floorMesh);
-
-// wireframe overlay
-const wGeo = new THREE.PlaneGeometry(SIZE, SIZE, RES, RES);
-wGeo.rotateX(-Math.PI/2);
-const wMesh = new THREE.Mesh(wGeo,
-  new THREE.MeshBasicMaterial({color:0x7fffb2,wireframe:true,transparent:true,opacity:0.06})
-);
-wMesh.position.y = 0.002;
-scene.add(wMesh);
-
-// --- Fold state ---
-// Each fold: { axis: {px,pz,dx,dz (normalized dir of axis line)}, angle, target }
-const folds = [];        // applied folds (max 3)
-let pendingAxis = null;  // axis being drawn
-let strength = 100;
-
-// ============================================================
-//  STAGE OBJECTS
-// ============================================================
-const stageMat = new THREE.MeshStandardMaterial({color:0x0e0e18,roughness:1});
-const accentMat = new THREE.MeshStandardMaterial({color:0xff7f50,emissive:0xff3300,emissiveIntensity:0.4});
-const illusionMat = new THREE.MeshStandardMaterial({color:0xb0a0ff,emissive:0x6040ff,emissiveIntensity:0.3});
-
-// Walls
-function addBox(x,y,z,w,h,d,mat){
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat||stageMat);
-  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true;
+// ── helpers ───────────────────────────────────────────────
+function addBox(x,y,z,w,h,d,mat,shadow=true){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x,y,z);
+  if(shadow){m.castShadow=true;m.receiveShadow=true;}
   scene.add(m); return m;
 }
 
-// Boundary walls
-addBox(0,2.5,-SIZE/2, SIZE,5,0.3);
-addBox(0,2.5, SIZE/2, SIZE,5,0.3);
-addBox(-SIZE/2,2.5,0, 0.3,5,SIZE);
-addBox( SIZE/2,2.5,0, 0.3,5,SIZE);
+// ── static geometry ───────────────────────────────────────
+addBox(0,-.15,0, 22,0.3,22, matFloor);           // floor
+addBox(0,2.5,-11, 22,5,.3, matWall);              // back wall
+addBox(0,2.5, 11, 22,5,.3, matWall);              // front wall
+addBox(-11,2.5,0, .3,5,22, matWall);              // left
+addBox( 11,2.5,0, .3,5,22, matWall);              // right
 
-// --- GOAL: high platform, reachable only by folding ---
-const goalPlatform = addBox(6, 4, -7, 3, 0.3, 3, accentMat);
-const goalLight = new THREE.PointLight(0xff7f50, 1.5, 8);
-goalLight.position.set(6,5,-7); scene.add(goalLight);
+// Goal — high up, needs fold to reach
+const goalPlatform = addBox(6,5,-7, 3,.25,3, matGoal);
+const gl = new THREE.PointLight(0xff7f50,1.5,8);
+gl.position.set(6,6,-7); scene.add(gl);
 
-// --- ILLUSION STAGE ---
-// Far small-looking cube (actually large, placed far away)
-// From starting position it looks the same height as the near cube
-const nearCube  = addBox(-4, 0.5,  2, 1, 1, 1, illusionMat); // near, small
-const farCube   = addBox(-4, 2.0, -8, 4, 4, 4, illusionMat); // far, LARGE (looks same from start)
+// ── FOLDABLE OBJECTS ─────────────────────────────────────
+// These objects move when folded
+// Each has: mesh, origPos (Vector3), origQuat
+const foldables = [];
 
-// Illusion hint trigger zone (near the near cube)
-const illusionZone = new THREE.Vector3(-4, 0, 2);
-
-// ============================================================
-//  PLAYER
-// ============================================================
-const playerMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.28, 0.28, 1.4, 12),
-  new THREE.MeshStandardMaterial({color:0x7fffb2, emissive:0x7fffb2, emissiveIntensity:0.15})
-);
-playerMesh.castShadow = true;
-scene.add(playerMesh);
-
-const player = {
-  pos: new THREE.Vector3(0, 1, 5),
-  vel: new THREE.Vector3(),
-  yaw: 0, pitch: 0,
-  onGround: false,
-  height: 0.8,
-};
-
-// ============================================================
-//  FOLD MATH
-// ============================================================
-// Apply all folds to a single vertex (original position)
-function applyAllFolds(ox, oy, oz) {
-  let x=ox, y=oy, z=oz;
-  for (const fold of folds) {
-    if (Math.abs(fold.angle) < 0.001) continue;
-    // Project point onto axis-perpendicular direction
-    // Axis line: point (fold.px, fold.pz), direction (fold.dx, fold.dz)
-    const rx = x - fold.px;
-    const rz = z - fold.pz;
-    // Component along axis
-    const along = rx * fold.dx + rz * fold.dz;
-    // Component perpendicular to axis (signed)
-    const perp = rx * (-fold.dz) + rz * fold.dx;
-    // Only fold the "positive perp" side
-    if (perp > 0) {
-      const dist = perp;
-      const ny = y + dist * Math.sin(fold.angle);
-      const np = fold.px + along * fold.dx - dist * Math.cos(fold.angle) * (-fold.dz)
-               + fold.pz + along * fold.dz;
-      // Reconstruct new x,z
-      const newPerp = -dist * Math.cos(fold.angle);
-      x = fold.px + along * fold.dx + newPerp * (-fold.dz);
-      z = fold.pz + along * fold.dz + newPerp * fold.dx;
-      y = ny;
-    }
-  }
-  return {x,y,z};
+function addFoldable(x,y,z,w,h,d,mat){
+  const m = addBox(x,y,z,w,h,d,mat);
+  const obj = {
+    mesh: m,
+    origPos: new THREE.Vector3(x,y,z),
+    origQuat: m.quaternion.clone(),
+    origScale: m.scale.clone(),
+    currentPos: new THREE.Vector3(x,y,z),
+  };
+  foldables.push(obj);
+  return obj;
 }
 
-function updateFloorMesh() {
-  const pos = floorGeo.attributes.position;
-  const wpos = wGeo.attributes.position;
-  for (let i=0; i<pos.count; i++) {
-    const ox=origVerts[i*3], oy=origVerts[i*3+1], oz=origVerts[i*3+2];
-    const {x,y,z} = applyAllFolds(ox,oy,oz);
-    pos.setXYZ(i,x,y,z);
-    wpos.setXYZ(i,x,y+0.002,z);
-  }
-  pos.needsUpdate = true;
-  wpos.needsUpdate = true;
-  floorGeo.computeVertexNormals();
+// Scattered blocks around the stage
+addFoldable(-3, 0.5,  3,  1.2,1.0,1.2, matA);
+addFoldable( 2, 0.5,  1,  1.0,1.5,1.0, matB);
+addFoldable(-1, 0.5, -3,  1.5,0.8,1.5, matC);
+addFoldable( 4, 0.5,  4,  1.0,1.0,1.0, matA);
+addFoldable(-5, 0.5, -2,  0.8,2.0,0.8, matB);
+addFoldable( 1, 0.5, -6,  1.2,1.2,1.2, matC);
+addFoldable(-4, 0.5,  6,  2.0,0.5,2.0, matA);
+addFoldable( 3, 0.5, -4,  0.9,1.8,0.9, matB);
+
+// ── FOLD STATE ────────────────────────────────────────────
+const foldHistory = []; // stack of fold ops
+let strength = 100;
+
+// Project 3D world pos to 2D screen pos
+function toScreen(pos3){
+  const v = pos3.clone().project(camera);
+  return{
+    x: ( v.x * .5 + .5) * innerWidth,
+    y: (-v.y * .5 + .5) * innerHeight,
+  };
 }
 
-// Get floor Y at world XZ by sampling nearby vertices
-function getFloorHeightAt(wx, wz) {
-  // Find the closest triangle on the folded mesh and return its Y
-  // Simplified: sample grid of original verts near the point, apply folds, find lowest above
-  let bestY = -99;
-  const step = SIZE/RES;
-  const searchR = step * 2;
-  for (let gi=0; gi<=RES; gi++) {
-    for (let gj=0; gj<=RES; gj++) {
-      const ox = gj * step - SIZE/2;
-      const oz = gi * step - SIZE/2;
-      const {x,y,z} = applyAllFolds(ox,0,oz);
-      const dx = x - wx, dz = z - wz;
-      if (dx*dx + dz*dz < searchR*searchR) {
-        if (y > bestY) bestY = y;
-      }
-    }
-  }
-  return bestY < -90 ? 0 : bestY;
-}
-
-// ============================================================
-//  FOLD AXIS DRAWING (mouse drag on floor)
-// ============================================================
-let isDragging = false;
-let dragStart = null, dragEnd = null;
-const raycaster = new THREE.Raycaster();
-
-// Visual axis line
-const axisLineMat = new THREE.LineBasicMaterial({color:0x7fffb2,transparent:true,opacity:0.8});
-const axisLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]);
-const axisLine = new THREE.Line(axisLineGeo, axisLineMat);
-scene.add(axisLine);
-
-function getFloorIntersect(event) {
-  const rect = renderer.domElement.getBoundingClientRect();
-  const nx = ((event.clientX - rect.left) / rect.width)  * 2 - 1;
-  const ny =-((event.clientY - rect.top)  / rect.height) * 2 + 1;
-  raycaster.setFromCamera({x:nx,y:ny}, camera);
-  // Ray-plane intersect at y=0
-  const plane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+// Project 2D screen pos to 3D ray, intersect with horizontal plane at y=targetY
+function screenToWorld(sx, sy, targetY=0){
+  const ndcX = (sx/innerWidth)*2-1;
+  const ndcY = -(sy/innerHeight)*2+1;
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera({x:ndcX,y:ndcY}, camera);
+  const plane = new THREE.Plane(new THREE.Vector3(0,1,0), -targetY);
   const pt = new THREE.Vector3();
-  raycaster.ray.intersectPlane(plane, pt);
+  ray.ray.intersectPlane(plane, pt);
   return pt;
 }
 
-// ============================================================
-//  INPUT
-// ============================================================
+// ── CORE: fold objects based on 2D screen axis ────────────
+// axisA, axisB: screen coords of fold axis endpoints
+// Objects on the "right" side of the axis (in screen space) get folded:
+// their screen position is reflected across the axis,
+// then re-projected back to 3D at their original depth
+function performFold(axisA, axisB){
+  // axis direction in screen space
+  const adx = axisB.x - axisA.x;
+  const ady = axisB.y - axisA.y;
+  const alen = Math.sqrt(adx*adx + ady*ady);
+  if(alen < 5) return false;
+  const anx = adx/alen, any = ady/alen; // axis unit
+  const nx = -any, ny = anx;            // axis normal (pointing "right")
+
+  const snapshot = [];
+
+  for(const obj of foldables){
+    // get screen pos of object
+    const sp = toScreen(obj.mesh.position);
+
+    // signed distance from axis line
+    const rx = sp.x - axisA.x, ry = sp.y - axisA.y;
+    const dist = rx*nx + ry*ny;
+
+    if(dist > 0){
+      // reflect screen position across axis
+      const newSx = sp.x - 2*dist*nx;
+      const newSy = sp.y - 2*dist*ny;
+
+      // un-project reflected screen pos back to 3D
+      // keep the same world-Y as before by projecting at that height
+      const worldY = obj.mesh.position.y;
+      const newWorld = screenToWorld(newSx, newSy, worldY);
+
+      if(newWorld){
+        snapshot.push({
+          obj,
+          prevPos: obj.mesh.position.clone(),
+          nextPos: newWorld.clone(),
+        });
+      }
+    }
+  }
+
+  if(snapshot.length === 0) return false;
+
+  // Animate
+  foldHistory.push(snapshot);
+
+  for(const s of snapshot){
+    animateTo(s.obj, s.nextPos);
+  }
+
+  strength -= 22;
+  return true;
+}
+
+// Animate object to new position
+function animateTo(obj, targetPos){
+  obj._animStart = obj.mesh.position.clone();
+  obj._animEnd   = targetPos.clone();
+  obj._animT     = 0;
+  obj._animating = true;
+}
+
+function undoLastFold(){
+  if(foldHistory.length === 0) return;
+  const snap = foldHistory.pop();
+  for(const s of snap){
+    animateTo(s.obj, s.prevPos);
+  }
+}
+
+function resetAll(){
+  foldHistory.length = 0;
+  strength = 100;
+  for(const obj of foldables){
+    animateTo(obj, obj.origPos);
+  }
+}
+
+// ── INPUT ─────────────────────────────────────────────────
+let mode = 'move'; // 'move' | 'fold'
 const keys = {};
-let isLocked = false;
-let titleShown = true;
+let rdown = false;
+let ldown = false;
+let axisStartScreen = null, axisEndScreen = null;
 
-renderer.domElement.addEventListener('click', () => {
-  if (titleShown) {
-    const t = document.getElementById('title');
-    t.style.opacity = '0';
-    setTimeout(()=>t.style.display='none',1000);
-    titleShown = false;
-    document.getElementById('msg').textContent = 'マウスドラッグで折り軸を引き、Fで折る';
+const P = {
+  pos: new THREE.Vector3(0,1.7,8),
+  vel: new THREE.Vector3(),
+  yaw: Math.PI,
+  pitch: -.2,
+  onGround: false,
+};
+
+function setMode(m){
+  mode = m;
+  const badge = document.getElementById('mode-badge');
+  if(m==='fold'){
+    badge.textContent='FOLD';
+    badge.style.color='#7fffb2';
+    badge.style.borderColor='#7fffb2';
+    document.getElementById('msg').textContent='ドラッグで折り軸を引く → F で折る';
+    renderer.domElement.style.cursor='crosshair';
+  } else {
+    badge.textContent='MOVE';
+    badge.style.color='#ff7f50';
+    badge.style.borderColor='#ff7f50';
+    document.getElementById('msg').textContent='TABで折りモード切替 / WASDで移動';
+    renderer.domElement.style.cursor='default';
   }
-  renderer.domElement.requestPointerLock();
-});
+}
+setMode('move');
 
-document.addEventListener('pointerlockchange', () => {
-  isLocked = document.pointerLockElement === renderer.domElement;
-});
-
-document.addEventListener('mousemove', e => {
-  if (!isLocked) return;
-  player.yaw   -= e.movementX * 0.0022;
-  player.pitch -= e.movementY * 0.0022;
-  player.pitch  = Math.max(-1.2, Math.min(1.2, player.pitch));
-});
-
-// Drag to draw fold axis (only when NOT pointer-locked)
-renderer.domElement.addEventListener('mousedown', e => {
-  if (isLocked) return;
-  const pt = getFloorIntersect(e);
-  if (!pt) return;
-  isDragging = true;
-  dragStart = pt.clone();
-  dragEnd = pt.clone();
-});
-renderer.domElement.addEventListener('mousemove', e => {
-  if (!isDragging || isLocked) return;
-  const pt = getFloorIntersect(e);
-  if (!pt) return;
-  dragEnd = pt.clone();
-  const pts = [dragStart.clone(), dragEnd.clone()];
-  axisLineGeo.setFromPoints(pts);
-  axisLineGeo.attributes.position.needsUpdate = true;
-});
-renderer.domElement.addEventListener('mouseup', () => {
-  if (!isDragging) return;
-  isDragging = false;
-  if (!dragStart || !dragEnd) return;
-  const dx = dragEnd.x - dragStart.x;
-  const dz = dragEnd.z - dragStart.z;
-  const len = Math.sqrt(dx*dx+dz*dz);
-  if (len < 0.5) return; // too short
-  pendingAxis = {
-    px: dragStart.x, pz: dragStart.z,
-    dx: dx/len, dz: dz/len
-  };
-  document.getElementById('msg').textContent = '軸が引かれた — [ F ] で折る';
-});
-
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', e=>{
   keys[e.code] = true;
-  if (e.code === 'KeyF' && pendingAxis && folds.length < 3 && strength > 15) {
-    folds.push({...pendingAxis, angle: 0, target: Math.PI * 0.85});
-    pendingAxis = null;
-    strength -= 28;
-    // Clear axis line
-    axisLineGeo.setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-    axisLineGeo.attributes.position.needsUpdate = true;
-    document.getElementById('msg').textContent = '折れた — ドラッグで次の軸を引く';
+  if(e.code==='Tab'){e.preventDefault();setMode(mode==='move'?'fold':'move');}
+  if(e.code==='KeyF' && mode==='fold' && axisStartScreen && axisEndScreen && strength>10){
+    if(performFold(axisStartScreen, axisEndScreen)){
+      axisStartScreen = null; axisEndScreen = null;
+      ctx2.clearRect(0,0,oc.width,oc.height);
+    }
   }
-  if (e.code === 'KeyR') {
-    folds.length = 0;
-    pendingAxis = null;
-    strength = 100;
-    player.pos.set(0,1,5);
-    player.vel.set(0,0,0);
-    updateFloorMesh();
-    document.getElementById('msg').textContent = 'リセット — マウスドラッグで折り軸を引き、Fで折る';
+  if(e.code==='KeyR'){resetAll();ctx2.clearRect(0,0,oc.width,oc.height);}
+  if(e.code==='KeyZ'){undoLastFold();}
+});
+document.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+renderer.domElement.addEventListener('mousedown', e=>{
+  if(e.button===0 && mode==='fold'){
+    ldown=true;
+    axisStartScreen = {x:e.clientX, y:e.clientY};
+    axisEndScreen   = {x:e.clientX, y:e.clientY};
   }
-  // ESC releases pointer lock (browser default) — allow drag mode
-  if (e.code === 'Escape') {
-    document.getElementById('msg').textContent = 'マウスドラッグで折り軸を引き、Fで折る（クリックで視点操作に戻る）';
+  if(e.button===2){rdown=true;}
+});
+renderer.domElement.addEventListener('mousemove', e=>{
+  if(ldown && mode==='fold'){
+    axisEndScreen = {x:e.clientX, y:e.clientY};
+    drawAxis();
+  }
+  if(rdown){
+    P.yaw   -= e.movementX*.0022;
+    P.pitch -= e.movementY*.0022;
+    P.pitch  = Math.max(-1.2, Math.min(1.2, P.pitch));
   }
 });
-document.addEventListener('keyup', e => { keys[e.code] = false; });
+renderer.domElement.addEventListener('mouseup', e=>{
+  if(e.button===0){ldown=false;}
+  if(e.button===2){rdown=false;}
+});
+renderer.domElement.addEventListener('contextmenu', e=>e.preventDefault());
 
-// ============================================================
-//  ILLUSION CHECK
-// ============================================================
-let illusionTriggered = false;
-function checkIllusion() {
-  const d = player.pos.distanceTo(illusionZone);
-  const hint = document.getElementById('illusion-hint');
-  if (d < 3 && !illusionTriggered) {
-    hint.textContent = '— この2つの箱、同じ大きさに見えた？ —\n近づいてみろ';
-    hint.style.opacity = '1';
-    illusionTriggered = true;
-  } else if (d < 1.5) {
-    hint.textContent = '— 遠くの箱は実は4倍の大きさだった —\n遠近感が世界を騙す';
-    hint.style.color = '#ff7f50';
-  } else if (d > 5) {
-    illusionTriggered = false;
-    hint.style.opacity = '0';
-    hint.style.color = '#ff7f50';
+function drawAxis(){
+  ctx2.clearRect(0,0,oc.width,oc.height);
+  if(!axisStartScreen||!axisEndScreen)return;
+  // draw axis line
+  ctx2.save();
+  ctx2.strokeStyle='rgba(127,255,178,0.85)';
+  ctx2.lineWidth=1.5;
+  ctx2.setLineDash([6,4]);
+  ctx2.beginPath();
+  ctx2.moveTo(axisStartScreen.x, axisStartScreen.y);
+  ctx2.lineTo(axisEndScreen.x, axisEndScreen.y);
+  ctx2.stroke();
+  // draw normal arrow showing which side folds
+  const adx = axisEndScreen.x - axisStartScreen.x;
+  const ady = axisEndScreen.y - axisStartScreen.y;
+  const alen = Math.sqrt(adx*adx+ady*ady);
+  if(alen>10){
+    const mx=(axisStartScreen.x+axisEndScreen.x)/2;
+    const my=(axisStartScreen.y+axisEndScreen.y)/2;
+    const nx=-ady/alen, ny=adx/alen;
+    ctx2.setLineDash([]);
+    ctx2.strokeStyle='rgba(255,127,80,0.7)';
+    ctx2.beginPath();
+    ctx2.moveTo(mx,my);
+    ctx2.lineTo(mx+nx*40,my+ny*40);
+    ctx2.stroke();
+    ctx2.fillStyle='rgba(255,127,80,0.7)';
+    ctx2.beginPath();
+    ctx2.arc(mx+nx*40,my+ny*40,3,0,Math.PI*2);
+    ctx2.fill();
+    // label
+    ctx2.fillStyle='rgba(127,255,178,0.6)';
+    ctx2.font='10px monospace';
+    ctx2.fillText('折る側 →',mx+6,my-8);
+  }
+  ctx2.restore();
+}
+
+// ── ANIMATE OBJECTS ───────────────────────────────────────
+function tickObjects(dt){
+  for(const obj of foldables){
+    if(!obj._animating)continue;
+    obj._animT = Math.min(1, obj._animT + dt*4);
+    const t = 1 - Math.pow(1-obj._animT, 3); // ease out cubic
+    obj.mesh.position.lerpVectors(obj._animStart, obj._animEnd, t);
+    if(obj._animT>=1)obj._animating=false;
   }
 }
 
-// ============================================================
-//  GOAL CHECK
-// ============================================================
-let won = false;
-function checkGoal() {
-  if (won) return;
-  const d = new THREE.Vector3(6,4,-7);
-  if (player.pos.distanceTo(d) < 2) {
-    won = true;
-    document.getElementById('msg').textContent = '— GOAL —\n世界を折って辿り着いた';
-    document.getElementById('msg').style.color = '#7fffb2';
+// ── PLAYER ────────────────────────────────────────────────
+const pmesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(.25,.25,1.4,10),
+  new THREE.MeshStandardMaterial({color:0x7fffb2,emissive:0x7fffb2,emissiveIntensity:.18})
+);
+pmesh.castShadow=true; scene.add(pmesh);
+
+function tickPlayer(dt){
+  if(mode!=='move')return;
+  const fwd   = new THREE.Vector3(-Math.sin(P.yaw),0,-Math.cos(P.yaw));
+  const right = new THREE.Vector3( Math.cos(P.yaw),0,-Math.sin(P.yaw));
+  const dir   = new THREE.Vector3();
+  if(keys['KeyW'])dir.addScaledVector(fwd, 1);
+  if(keys['KeyS'])dir.addScaledVector(fwd,-1);
+  if(keys['KeyA'])dir.addScaledVector(right,-1);
+  if(keys['KeyD'])dir.addScaledVector(right, 1);
+  if(dir.length()>0)dir.normalize();
+
+  P.vel.x += (dir.x*5.5-P.vel.x)*Math.min(dt*13,1);
+  P.vel.z += (dir.z*5.5-P.vel.z)*Math.min(dt*13,1);
+  P.vel.y -= 22*dt;
+  P.pos.addScaledVector(P.vel,dt);
+
+  // floor
+  if(P.pos.y<=1.0){P.pos.y=1.0;if(P.vel.y<0)P.vel.y=0;P.onGround=true;}
+  else P.onGround=false;
+
+  // foldable objects as platforms
+  for(const obj of foldables){
+    const op = obj.mesh.position;
+    const og = obj.mesh.geometry.parameters;
+    const top = op.y + og.height/2 + .85;
+    const dx=Math.abs(P.pos.x-op.x), dz=Math.abs(P.pos.z-op.z);
+    if(dx<og.width/2+.3 && dz<og.depth/2+.3 && P.pos.y<top && P.pos.y>op.y){
+      P.pos.y=top;if(P.vel.y<0){P.vel.y=0;P.onGround=true;}
+    }
+  }
+
+  // goal platform
+  if(P.pos.x>4.4&&P.pos.x<7.6&&P.pos.z>-8.5&&P.pos.z<-5.5){
+    const gt=5.125+.85;
+    if(P.pos.y<gt&&P.pos.y>4.5){P.pos.y=gt;if(P.vel.y<0){P.vel.y=0;P.onGround=true;}}
+  }
+
+  if(P.pos.y>8){P.pos.y=8;P.vel.y=0;}
+  const half=10.5;
+  P.pos.x=Math.max(-half,Math.min(half,P.pos.x));
+  P.pos.z=Math.max(-half,Math.min(half,P.pos.z));
+
+  if((keys['Space']||keys['ArrowUp'])&&P.onGround){P.vel.y=8;P.onGround=false;}
+
+  pmesh.position.set(P.pos.x,P.pos.y-.85+.7,P.pos.z);
+  camera.position.copy(P.pos);
+  camera.rotation.order='YXZ';
+  camera.rotation.y=P.yaw;
+  camera.rotation.x=P.pitch;
+}
+
+// ── GOAL ─────────────────────────────────────────────────
+let won=false;
+function checkGoal(){
+  if(won)return;
+  if(P.pos.distanceTo(new THREE.Vector3(6,5.5,-7))<2){
+    won=true;
+    document.getElementById('msg').textContent='— GOAL —\nオブジェクトを折って足場を作った';
   }
 }
 
-// ============================================================
-//  MAIN LOOP
-// ============================================================
-const clock = new THREE.Clock();
-function animate() {
+// ── MAIN LOOP ─────────────────────────────────────────────
+const clock=new THREE.Clock();
+(function animate(){
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const dt=Math.min(clock.getDelta(),.05);
 
-  // Animate folds
-  let needUpdate = false;
-  for (const f of folds) {
-    if (Math.abs(f.angle - f.target) > 0.001) {
-      f.angle += (f.target - f.angle) * dt * 5;
-      needUpdate = true;
-    }
-  }
-  if (needUpdate) updateFloorMesh();
+  if(strength<100)strength=Math.min(100,strength+dt*3);
+  const sb=document.getElementById('sbar');
+  sb.style.width=strength+'%';
+  sb.style.background=strength<30?'#ff7f50':strength<60?'#ffcc44':'#7fffb2';
 
-  // Strength regen
-  if (strength < 100) strength = Math.min(100, strength + dt*4);
-  const sbar = document.getElementById('sbar');
-  sbar.style.width = strength + '%';
-  sbar.style.background = strength<30?'#ff7f50':strength<60?'#ffcc44':'#7fffb2';
-
-  // Player movement
-  if (isLocked) {
-    const fwd   = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
-    const right = new THREE.Vector3( Math.cos(player.yaw), 0, -Math.sin(player.yaw));
-    const dir   = new THREE.Vector3();
-    if (keys['KeyW']) dir.addScaledVector(fwd,   1);
-    if (keys['KeyS']) dir.addScaledVector(fwd,  -1);
-    if (keys['KeyA']) dir.addScaledVector(right, -1);
-    if (keys['KeyD']) dir.addScaledVector(right,  1);
-    if (dir.length() > 0) dir.normalize();
-
-    const spd = 5.5;
-    player.vel.x += (dir.x*spd - player.vel.x) * Math.min(dt*12, 1);
-    player.vel.z += (dir.z*spd - player.vel.z) * Math.min(dt*12, 1);
-    player.vel.y -= 22 * dt; // gravity
-
-    player.pos.addScaledVector(player.vel, dt);
-
-    // Floor collision — sample folded height
-    const fy = getFloorHeightAt(player.pos.x, player.pos.z);
-    const groundY = fy + player.height;
-    if (player.pos.y <= groundY) {
-      player.pos.y = groundY;
-      if (player.vel.y < 0) player.vel.y = 0;
-      player.onGround = true;
-    } else {
-      player.onGround = false;
-    }
-
-    // Goal platform collision
-    if (player.pos.x>4.5&&player.pos.x<7.5 && player.pos.z>-8.5&&player.pos.z<-5.5) {
-      const gy = 4.15 + player.height;
-      if (player.pos.y < gy && player.pos.y > 3.5) {
-        player.pos.y = gy;
-        if (player.vel.y < 0) { player.vel.y = 0; player.onGround = true; }
-      }
-    }
-
-    // nearCube top collision
-    if (Math.abs(player.pos.x+4)<0.8 && Math.abs(player.pos.z-2)<0.8) {
-      const cy = 1.0 + player.height;
-      if (player.pos.y < cy && player.pos.y > 0.5) {
-        player.pos.y = cy; if(player.vel.y<0){player.vel.y=0;player.onGround=true;}
-      }
-    }
-
-    // Ceiling
-    if (player.pos.y > 5.5) { player.pos.y = 5.5; player.vel.y = 0; }
-
-    // Boundary
-    const half = SIZE/2 - 0.6;
-    player.pos.x = Math.max(-half, Math.min(half, player.pos.x));
-    player.pos.z = Math.max(-half, Math.min(half, player.pos.z));
-
-    // Jump
-    if ((keys['Space']||keys['ArrowUp']) && player.onGround) {
-      player.vel.y = 8;
-      player.onGround = false;
-    }
-  }
-
-  // Sync player mesh
-  playerMesh.position.copy(player.pos);
-  playerMesh.position.y = player.pos.y - player.height + 0.7;
-
-  // Camera = player eyes
-  camera.position.copy(player.pos).add(new THREE.Vector3(0, 0.15, 0));
-  camera.rotation.order = 'YXZ';
-  camera.rotation.y = player.yaw;
-  camera.rotation.x = player.pitch;
-
-  checkIllusion();
+  tickObjects(dt);
+  tickPlayer(dt);
   checkGoal();
+  renderer.render(scene,camera);
+})();
 
-  renderer.render(scene, camera);
-}
-animate();
-
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight;
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth,innerHeight);
+  oc.width=innerWidth;oc.height=innerHeight;
 });
 </script>
 </body>
