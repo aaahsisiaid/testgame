@@ -65,27 +65,33 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.localClippingEnabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.4;
+renderer.outputEncoding = THREE.sRGBEncoding;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a0f);
-scene.fog = new THREE.Fog(0x0a0a0f, 30, 80);
+scene.background = new THREE.Color(0x1a1a28);
+scene.fog = new THREE.Fog(0x1a1a28, 35, 90);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 120);
 
 // ── Lights ────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0xaabbff, 0.65));
-const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-sun.position.set(8,14,6); sun.castShadow=true;
+scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+sun.position.set(10,18,8); sun.castShadow=true;
 sun.shadow.mapSize.set(2048,2048);
 sun.shadow.camera.left=sun.shadow.camera.bottom=-22;
 sun.shadow.camera.right=sun.shadow.camera.top=22;
 sun.shadow.camera.far=80;
+sun.shadow.bias=-0.001;
 scene.add(sun);
-const fillLight1=new THREE.PointLight(0x6688ff,0.7,50);
-fillLight1.position.set(-5,5,5);
+const hemi = new THREE.HemisphereLight(0xddeeff, 0x222233, 0.8);
+scene.add(hemi);
+const fillLight1=new THREE.PointLight(0x88aaff,0.9,55);
+fillLight1.position.set(-6,7,6);
 scene.add(fillLight1);
-const fillLight2=new THREE.PointLight(0xffffff,0.5,40);
-fillLight2.position.set(5,3,8);
+const fillLight2=new THREE.PointLight(0xffffff,0.8,45);
+fillLight2.position.set(6,5,9);
 scene.add(fillLight2);
 
 // ── Material factory ──────────────────────────────────────
@@ -116,13 +122,19 @@ function addObj(geo, matP, x, y, z, rx=0, ry=0, rz=0){
   return m;
 }
 
-// Floor
-addObj(new THREE.BoxGeometry(28,.3,28), {color:0x13131e,roughness:.95}, 0,-.15,0);
-// Walls
-addObj(new THREE.BoxGeometry(28,7,.3), {color:0x0d0d17,roughness:1}, 0,3,-14);
-addObj(new THREE.BoxGeometry(28,7,.3), {color:0x0d0d17,roughness:1}, 0,3, 14);
-addObj(new THREE.BoxGeometry(.3,7,28), {color:0x0d0d17,roughness:1},-14,3,0);
-addObj(new THREE.BoxGeometry(.3,7,28), {color:0x0d0d17,roughness:1}, 14,3,0);
+// Floor — subdivided so folds cut cleanly through the surface
+// (a single low-poly box only has 8 verts at the corners; a fold line
+//  through the middle of a face has nothing to grab, so it tears.
+//  A 40x40 grid gives a fold line plenty of vertices to act on.)
+function subdividedBox(w,h,d,segX,segY,segZ){
+  return new THREE.BoxGeometry(w,h,d,segX,segY,segZ);
+}
+addObj(subdividedBox(28,.3,28,40,1,40), {color:0x1c1c2c,roughness:.9}, 0,-.15,0);
+// Walls — also subdivided along their long axis
+addObj(subdividedBox(28,7,.3,40,12,1), {color:0x15151f,roughness:1}, 0,3,-14);
+addObj(subdividedBox(28,7,.3,40,12,1), {color:0x15151f,roughness:1}, 0,3, 14);
+addObj(subdividedBox(.3,7,28,1,12,40), {color:0x15151f,roughness:1},-14,3,0);
+addObj(subdividedBox(.3,7,28,1,12,40), {color:0x15151f,roughness:1}, 14,3,0);
 // Platforms
 addObj(new THREE.BoxGeometry(2.5,.25,2.5),{color:0x1e1e38,roughness:.85},-4,1.1,2);
 addObj(new THREE.BoxGeometry(2.5,.25,2.5),{color:0x1e1e38,roughness:.85}, 3,2.0,-3);
@@ -144,7 +156,8 @@ pmesh.castShadow=true; scene.add(pmesh);
 const P={pos:new THREE.Vector3(0,1.7,8), vel:new THREE.Vector3(), yaw:Math.PI, pitch:-.15, onGround:false};
 
 // ── Dynamic collision boxes ───────────────────────────────
-const dynCols=[];
+// (collision is now computed live via raycasting against current
+//  mesh geometry — see findGroundY — so no stale box list needed)
 
 // ── Fold history (for undo) ───────────────────────────────
 const foldHistory=[];
@@ -348,11 +361,40 @@ function buildCurtainPlane(){
   const rayA=screenRay(axA.x,axA.y);
   const rayB=screenRay(axB.x,axB.y);
   const n=rayA.d.clone().cross(rayB.d).normalize();
-  // determine which direction is "folded side"
-  const testRay=screenRay(axA.x+10,axA.y);
-  const testPt=snapCamPos.clone().addScaledVector(testRay.d,5);
-  const sign=Math.sign(n.dot(testPt)-n.dot(snapCamPos));
-  return {n, d:n.dot(snapCamPos), foldedSign:sign};
+  const d=n.dot(snapCamPos);
+
+  // "folded side" must match the side the user dragged toward
+  // (screen-space right-of-axis = folded), not an arbitrary 3D guess.
+  // Sample a point that's unambiguously screen-right of the axis line,
+  // far enough out to land on real geometry (not just near the camera),
+  // then check which sign of n·x-d it produces.
+  const midSx=(axA.x+axB.x)/2, midSy=(axA.y+axB.y)/2;
+  const axisDx=axB.x-axA.x, axisDy=axB.y-axA.y;
+  const axisLen=Math.hypot(axisDx,axisDy)||1;
+  // screen-space normal pointing right of the drag direction
+  const screenNx=-axisDy/axisLen, screenNy=axisDx/axisLen;
+  const sampleSx=midSx+screenNx*60, sampleSy=midSy+screenNy*60;
+
+  const sampleRay=screenRay(sampleSx,sampleSy);
+  const samplePt=snapCamPos.clone().addScaledVector(sampleRay.d,20);
+  const sign=Math.sign(n.dot(samplePt)-d) || 1;
+
+  // The 2D sign convention: axisSign2D(sampleSx,sampleSy) tells us
+  // which numeric sign corresponds to "right of the drag" in screen
+  // space. Store it so classifyAndFold can compare individual
+  // projected vertices against the SAME convention.
+  const screenFoldSign = Math.sign(axisSign2D(sampleSx,sampleSy)) || 1;
+
+  return {n, d, foldedSign:sign, screenFoldSign};
+}
+
+// ── Which side of the curtain is the PLAYER standing on? ──
+// The player's own ground must never be the side that gets folded —
+// only the side the player is NOT standing on (i.e. "ahead of" them,
+// away from the camera/player) should rotate.
+function playerIsOnFoldedSide(curtain){
+  const side=Math.sign(curtain.n.dot(P.pos)-curtain.d);
+  return side*curtain.foldedSign>0;
 }
 
 // ── Build world-space fold axis ───────────────────────────
@@ -374,7 +416,107 @@ function buildWorldAxis(){
   return {pivot, dir};
 }
 
-// ── Per-vertex fold transform ─────────────────────────────
+// ── Cheap pre-check: does this mesh need folding at all? ──
+// Checks the CURRENT geometry (before any subdivision) — if not a
+// single vertex is both (a) on the folded side of the 3D curtain
+// and (b) visibly on the folded side of the photo, this mesh is
+// completely outside the fold's effect and must be left untouched.
+function meshHasFoldableVertex(mesh, curtain){
+  const geo=mesh.geometry;
+  const posAttr=geo.attributes.position;
+  const mat=mesh.matrixWorld;
+  for(let i=0;i<posAttr.count;i++){
+    const wp=new THREE.Vector3(posAttr.getX(i),posAttr.getY(i),posAttr.getZ(i))
+      .applyMatrix4(mat);
+    const side3D = Math.sign(curtain.n.dot(wp)-curtain.d) * curtain.foldedSign;
+    if(side3D<=0) continue;
+    const sc=worldToScreen(wp);
+    if(!sc.vis) continue;
+    const sideVal = axisSign2D(sc.sx, sc.sy);
+    if(Math.sign(sideVal) === curtain.screenFoldSign) return true;
+  }
+  return false;
+}
+
+// ── Cut triangles that straddle the curtain plane ─────────
+// Without this, a triangle with 2 verts on one side and 1 on the
+// other gets dragged into a degenerate shape when only some of its
+// verts rotate. We insert new vertices exactly on the curtain plane
+// so every triangle ends up fully on one side or the other.
+function subdivideAtCurtain(mesh, curtain){
+  const geo = mesh.geometry;
+  const mat = mesh.matrixWorld;
+  const invMat = mat.clone().invert();
+  const posAttr = geo.attributes.position;
+  const idx = geo.index;
+  if(!idx) return; // non-indexed geometry not expected here
+
+  const oldPos = [];
+  for(let i=0;i<posAttr.count;i++){
+    oldPos.push(new THREE.Vector3(posAttr.getX(i),posAttr.getY(i),posAttr.getZ(i)));
+  }
+
+  function sideOf(localV){
+    const wp = localV.clone().applyMatrix4(mat);
+    return curtain.n.dot(wp) - curtain.d;
+  }
+
+  const newPositions = oldPos.map(v=>v.clone());
+  const newTris = [];
+  const vertCache = new Map(); // "i1_i2" -> new vertex index
+
+  function getCutVertex(i1,i2,s1,s2){
+    const key = i1<i2 ? i1+'_'+i2 : i2+'_'+i1;
+    if(vertCache.has(key)) return vertCache.get(key);
+    const t = s1/(s1-s2);
+    const v = oldPos[i1].clone().lerp(oldPos[i2], t);
+    const newIdx = newPositions.length;
+    newPositions.push(v);
+    vertCache.set(key,newIdx);
+    return newIdx;
+  }
+
+  for(let t=0;t<idx.count;t+=3){
+    const i0=idx.getX(t), i1=idx.getX(t+1), i2=idx.getX(t+2);
+    const s0=sideOf(oldPos[i0]), s1=sideOf(oldPos[i1]), s2=sideOf(oldPos[i2]);
+    const pos0=s0>=0, pos1=s1>=0, pos2=s2>=0;
+
+    if(pos0===pos1 && pos1===pos2){
+      // entirely on one side — keep as-is
+      newTris.push(i0,i1,i2);
+      continue;
+    }
+
+    // straddles — figure out the lone vertex
+    let lone, a, b, loneS, aS, bS;
+    if(pos0!==pos1 && pos0!==pos2){ lone=i0;a=i1;b=i2; loneS=s0;aS=s1;bS=s2; }
+    else if(pos1!==pos0 && pos1!==pos2){ lone=i1;a=i2;b=i0; loneS=s1;aS=s2;bS=s0; }
+    else { lone=i2;a=i0;b=i1; loneS=s2;aS=s0;bS=s1; }
+
+    const cutA = getCutVertex(lone,a,loneS,aS);
+    const cutB = getCutVertex(lone,b,loneS,bS);
+
+    // lone triangle (small piece)
+    newTris.push(lone, cutA, cutB);
+    // remaining quad (a, b, cutB, cutA) split into 2 triangles
+    newTris.push(a, b, cutB);
+    newTris.push(a, cutB, cutA);
+  }
+
+  // Rebuild geometry with new verts/indices
+  const flatPos = new Float32Array(newPositions.length*3);
+  newPositions.forEach((v,i)=>{ flatPos[i*3]=v.x; flatPos[i*3+1]=v.y; flatPos[i*3+2]=v.z; });
+
+  const newGeo = new THREE.BufferGeometry();
+  newGeo.setAttribute('position', new THREE.BufferAttribute(flatPos,3));
+  newGeo.setIndex(newTris);
+  newGeo.computeVertexNormals();
+
+  mesh.geometry.dispose();
+  mesh.geometry = newGeo;
+}
+
+
 // vertex in world space, on folded side → rotate around world axis
 function foldVertex(wp, pivot, axisDir, rad, curtainN, curtainD){
   // project onto axis
@@ -398,28 +540,43 @@ function classifyAndFold(mesh, curtain, worldAxis, rad){
   const count=posAttr.count;
   const localPos=[]; // Vector3 in local space
   const worldPos=[]; // Vector3 in world space
-  const sides=[];    // +1 = folded, -1 = static, 0 = on plane
+  const sides=[];    // +1 = folded, -1 = static (combined 3D + 2D check)
 
   for(let i=0;i<count;i++){
     const lp=new THREE.Vector3(
       posAttr.getX(i), posAttr.getY(i), posAttr.getZ(i)
     );
     const wp=lp.clone().applyMatrix4(mat);
-    const side=Math.sign(curtain.n.dot(wp)-curtain.d);
     localPos.push(lp);
     worldPos.push(wp);
-    sides.push(side*curtain.foldedSign>0?1:-1);
-    if(side*curtain.foldedSign>0) anyFolded=true; else anyStatic=true;
+
+    // 3D check: which side of the curtain plane is this vertex on
+    const side3D = Math.sign(curtain.n.dot(wp)-curtain.d) * curtain.foldedSign;
+
+    // 2D check: project to the photo and see which side of the
+    // drawn fold line it actually lands on. A vertex can be on the
+    // "folded" side of the 3D curtain yet be drawn on the opposite
+    // side of the line in the photo (e.g. it's far off to the side,
+    // or behind something) — only fold what's truly on the folded
+    // side IN THE PHOTO ITSELF.
+    const sc=worldToScreen(wp);
+    let folded2D=false;
+    if(sc.vis){
+      const sideVal = axisSign2D(sc.sx, sc.sy);
+      // axisSign2D > 0 is the side we dragged the line "into" —
+      // must match the same screen-space convention used when the
+      // axis was drawn (right-of-drag = folded), so reuse the same
+      // sign source as foldedSign's sample point.
+      folded2D = Math.sign(sideVal) === curtain.screenFoldSign;
+    }
+
+    const isFolded = sc.vis && side3D>0 && folded2D;
+    sides.push(isFolded?1:-1);
+    if(isFolded) anyFolded=true; else anyStatic=true;
   }
 
   // Check if at least one folded vertex is visible on screen
-  let visibleFolded=false;
-  for(let i=0;i<count;i++){
-    if(sides[i]===1){
-      const sc=worldToScreen(worldPos[i]);
-      if(sc.vis) {visibleFolded=true; break;}
-    }
-  }
+  let visibleFolded = anyFolded;
 
   if(!visibleFolded) return null; // nothing to fold on this mesh
 
@@ -450,11 +607,31 @@ function performFold(){
   const worldAxis= buildWorldAxis();
   const rad      = foldAngle*Math.PI/180;
 
+  // SAFEGUARD: the ground the player is standing on must never be
+  // the side that rotates. If our screen-space sign guess put the
+  // player on the folded side, flip it — only the far side (away
+  // from the player) should ever fold.
+  if(playerIsOnFoldedSide(curtain)){
+    curtain.foldedSign *= -1;
+  }
+
+
   const undoList=[];
   let foldCount=0;
 
   for(const {mesh, matP} of TRACKED){
-    // Skip if mesh is entirely behind camera
+    mesh.updateMatrixWorld(true);
+
+    // Cheap pre-check on the CURRENT (un-subdivided) geometry:
+    // does any vertex of this mesh actually land on the folded
+    // side of the photo? If not, skip entirely — don't subdivide,
+    // don't touch its geometry at all. This is what keeps objects
+    // outside the photo's folded region completely untouched.
+    if(!meshHasFoldableVertex(mesh, curtain)) continue;
+
+    // Cut any triangle that straddles the curtain so the fold
+    // never has to bend a single triangle across two sides
+    subdivideAtCurtain(mesh, curtain);
     mesh.updateMatrixWorld(true);
 
     const result=classifyAndFold(mesh, curtain, worldAxis, rad);
@@ -476,17 +653,8 @@ function performFold(){
     posAttr.needsUpdate=true;
     mesh.geometry.computeVertexNormals();
     mesh.geometry.computeBoundingBox();
-
-    // Update collision AABB from new bounding box
-    mesh.geometry.computeBoundingBox();
-    const bb=mesh.geometry.boundingBox;
-    const wmat=mesh.matrixWorld;
-    const min=bb.min.clone().applyMatrix4(wmat);
-    const max=bb.max.clone().applyMatrix4(wmat);
-    const cx=(min.x+max.x)/2, cy=(min.y+max.y)/2, cz=(min.z+max.z)/2;
-    const hx=(max.x-min.x)/2, hy=(max.y-min.y)/2, hz=(max.z-min.z)/2;
-    // Update dynCols (or push new one)
-    dynCols.push({cx,cy,cz,hx,hy,hz});
+    mesh.geometry.computeBoundingSphere(); // required for raycasting to early-out correctly
+    mesh.updateMatrixWorld(true);
 
     foldCount++;
   }
@@ -511,7 +679,7 @@ function undoFold(){
     posAttr.needsUpdate=true;
     mesh.geometry.computeVertexNormals();
   }
-  dynCols.length=0;
+  // (no stale collision list to clear — raycasting reads live geometry)
   toast('一つ戻しました');
 }
 
@@ -538,24 +706,22 @@ mainC.addEventListener('mouseup',e=>{if(e.button===2)rdown=false;});
 mainC.addEventListener('contextmenu',e=>e.preventDefault());
 
 // ════════════════════════════════════════════════════════
-//  Player
+//  Player collision — raycast straight down into the ACTUAL
+//  current mesh surfaces. This always matches what's rendered,
+//  including folded/angled geometry, instead of relying on
+//  fixed AABBs that go stale the moment a mesh is folded.
 // ════════════════════════════════════════════════════════
-function platCollide(cx,cy,cz,hx,hy,hz){
-  const topY=cy+hy;
-  if(Math.abs(P.pos.x-cx)<hx+0.3&&Math.abs(P.pos.z-cz)<hz+0.3){
-    if(P.pos.y<topY+1.05&&P.pos.y>cy-0.2&&P.vel.y<=0){
-      P.pos.y=topY+1.05; P.vel.y=0; P.onGround=true;
-    }
-  }
-}
+const downRay = new THREE.Raycaster();
+const COLLIDABLE_MESHES = TRACKED.map(t=>t.mesh); // updated in place as meshes fold
 
-const staticCols=[
-  {cx:0,   cy:-.15,cz:0,   hx:14,  hy:.15, hz:14},
-  {cx:-4,  cy:1.1, cz:2,   hx:1.25,hy:.125,hz:1.25},
-  {cx:3,   cy:2.0, cz:-3,  hx:1.25,hy:.125,hz:1.25},
-  {cx:-2,  cy:3.2, cz:-5,  hx:1.25,hy:.125,hz:1.25},
-  {cx:5,   cy:5.5, cz:-7,  hx:1.5, hy:.15, hz:1.5},
-];
+function findGroundY(x, z, fromY){
+  downRay.set(new THREE.Vector3(x, fromY, z), new THREE.Vector3(0,-1,0));
+  downRay.far = fromY + 2; // don't search infinitely below the world
+  const hits = downRay.intersectObjects(COLLIDABLE_MESHES, false);
+  if(hits.length === 0) return null;
+  // Closest hit (Three sorts intersectObjects by distance already)
+  return hits[0].point.y;
+}
 
 function tickPlayer(dt){
   if(pui.style.display==='block') return;
@@ -572,9 +738,22 @@ function tickPlayer(dt){
   P.vel.y-=22*dt;
   P.pos.addScaledVector(P.vel,dt);
 
-  P.onGround=false;
-  staticCols.forEach(p=>platCollide(p.cx,p.cy,p.cz,p.hx,p.hy,p.hz));
-  dynCols.forEach(p=>platCollide(p.cx,p.cy,p.cz,p.hx,p.hy,p.hz));
+  // Raycast straight down from slightly above the player to find
+  // the actual surface beneath them — always matches current
+  // (possibly folded) geometry, never goes stale.
+  const probeY = P.pos.y + 1.2;
+  const groundY = findGroundY(P.pos.x, P.pos.z, probeY);
+
+  P.onGround = false;
+  if(groundY !== null){
+    const standY = groundY + 1.05; // player eye height above feet
+    // Only snap to it if we're at/below it and falling (or already resting)
+    if(P.pos.y <= standY + 0.05 && P.vel.y <= 0.01){
+      P.pos.y = standY;
+      P.vel.y = 0;
+      P.onGround = true;
+    }
+  }
 
   P.pos.y=Math.min(12,P.pos.y);
   P.pos.x=Math.max(-13,Math.min(13,P.pos.x));
